@@ -1,0 +1,7 @@
+ifcopenshell>=0.7
+trimesh[easy]>=4.0
+numpy>=1.24
+scipy>=1.10
+pyvista>=0.42
+networkx>=3.0
+scikit-image>=0.21
