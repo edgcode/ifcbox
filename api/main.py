@@ -18,6 +18,7 @@ from api.storage import meta
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     meta.init()
+    meta.clear_preparing()  # recover floors stuck 'preparing' from a prior process
     yield
 
 

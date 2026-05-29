@@ -123,6 +123,10 @@ class SqliteMeta:
         with self._conn() as c:
             c.executescript(_SCHEMA)
 
+    def clear_preparing(self) -> None:
+        with self._conn() as c:
+            c.execute("UPDATE floor_prep SET status='unprepared' WHERE status='preparing'")
+
     # ── models ────────────────────────────────────────────────────────────────
     def insert_model(self, model_id, filename, storey_count, unit_scale) -> None:
         with self._conn() as c:
