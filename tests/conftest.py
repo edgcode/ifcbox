@@ -16,6 +16,7 @@ import pytest
 # Force the local backend + an isolated data dir BEFORE any `api` module is
 # imported, so a cloud .env never leaks into the test suite.
 os.environ["IFCBOX_STORAGE"] = "local"
+os.environ["IFCBOX_APP_TOKEN"] = ""  # auth off in tests (overrides any .env)
 os.environ.setdefault("IFCBOX_DATA_DIR", tempfile.mkdtemp(prefix="ifcbox_test_"))
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

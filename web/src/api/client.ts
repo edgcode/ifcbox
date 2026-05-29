@@ -22,6 +22,13 @@ export function setStoredToken(token: string | null): void {
   else localStorage.removeItem(TOKEN_KEY)
 }
 
+// Asset URLs are loaded by <img>/useGLTF/useTexture and download links, which
+// can't set headers — carry the token as a query param instead.
+function withToken(url: string): string {
+  const token = getToken()
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
+}
+
 export class ApiError extends Error {
   status: number
   constructor(status: number, message: string) {
@@ -62,9 +69,10 @@ export const api = {
     req<FloorDetail>(`/models/${id}/floors/${n}`),
   prepareFloor: (id: string, n: number) =>
     req<{ status: string }>(`/models/${id}/floors/${n}/prepare`, { method: 'POST' }),
-  geometryUrl: (id: string, n: number) => `/api/v1/models/${id}/floors/${n}/geometry`,
+  geometryUrl: (id: string, n: number) =>
+    withToken(`/api/v1/models/${id}/floors/${n}/geometry`),
   overlayUrl: (id: string, n: number, kind: 'occupancy' | 'clearance' | 'rooms') =>
-    `/api/v1/models/${id}/floors/${n}/overlays/${kind}`,
+    withToken(`/api/v1/models/${id}/floors/${n}/overlays/${kind}`),
   getWalls: (id: string, n: number) => req<Walls>(`/models/${id}/floors/${n}/walls`),
   getRoomClasses: () => req<RoomClass[]>('/room-classes'),
 
@@ -75,7 +83,7 @@ export const api = {
     }),
   listRoutes: (id: string) => req<RouteSummary[]>(`/models/${id}/routes`),
   getRoute: (routeId: string) => req<RouteResult>(`/routes/${routeId}`),
-  meshUrl: (routeId: string) => `/api/v1/routes/${routeId}/mesh`,
+  meshUrl: (routeId: string) => withToken(`/api/v1/routes/${routeId}/mesh`),
 }
 
 // Build a WebSocket URL for prep progress, carrying the token as a query param
