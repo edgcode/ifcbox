@@ -19,7 +19,7 @@ def build_shell_mesh(meshes: list, site_transform):
 
     if not meshes:
         return trimesh.Trimesh()
-    world = [site_transform.transform_mesh(m) for m in meshes]
+    world = [site_transform.world_mesh(m) for m in meshes]
     return trimesh.util.concatenate(world)
 
 

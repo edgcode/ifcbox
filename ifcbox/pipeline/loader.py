@@ -53,10 +53,15 @@ class SiteTransform:
         return (self.inv_matrix @ h.T).T[:, :3]
 
     def transform_mesh(self, mesh) -> "trimesh.Trimesh":
-        """Return a copy of the mesh with vertices transformed to site coords."""
-        import trimesh
+        """Return a copy of a world-coord mesh transformed into site coords."""
         m = mesh.copy()
         m.vertices = self.to_site(m.vertices)
+        return m
+
+    def world_mesh(self, mesh) -> "trimesh.Trimesh":
+        """Return a copy of a site-aligned mesh transformed back into world coords."""
+        m = mesh.copy()
+        m.vertices = self.to_world(m.vertices)
         return m
 
 

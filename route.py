@@ -159,7 +159,7 @@ def cmd_route(args):
     if not args.no_view:
         from ifcbox.visualize import show
         st = prep.site_transform
-        world_meshes = [st.transform_mesh(m) for m in geom.meshes]
+        world_meshes = [st.world_mesh(m) for m in geom.meshes]
         wps = [np.array(w) for w in result.segments[0].waypoints]
         show(world_meshes, pipe_mesh, wps,
              title=f"IFCBox — {storey.name} — CHW route ({result.total_length:.1f}m)")
