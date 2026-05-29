@@ -7,6 +7,7 @@ import type {
   RouteRequest,
   RouteResult,
   RouteSummary,
+  Walls,
 } from './types'
 
 const TOKEN_KEY = 'ifcbox_token'
@@ -63,6 +64,7 @@ export const api = {
   geometryUrl: (id: string, n: number) => `/api/v1/models/${id}/floors/${n}/geometry`,
   overlayUrl: (id: string, n: number, kind: 'occupancy' | 'clearance') =>
     `/api/v1/models/${id}/floors/${n}/overlays/${kind}`,
+  getWalls: (id: string, n: number) => req<Walls>(`/models/${id}/floors/${n}/walls`),
 
   submitRoute: (id: string, n: number, body: RouteRequest) =>
     req<RouteResult>(`/models/${id}/floors/${n}/routes`, {

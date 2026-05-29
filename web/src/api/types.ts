@@ -54,6 +54,17 @@ export interface FloorDetail {
   grid?: GridMeta | null
 }
 
+export interface WallAttrs {
+  id: string
+  ifc_type: string
+  thickness_m: number
+  wall_type: string
+  wall_type_name: string
+  fire_rating: string
+}
+
+export type Walls = Record<string, WallAttrs>
+
 export type AnchorType = 'point' | 'terminal' | 'room'
 
 export interface AnchorIn {

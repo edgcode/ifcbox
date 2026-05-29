@@ -1,4 +1,4 @@
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Bounds, Loader, OrbitControls } from '@react-three/drei'
@@ -10,11 +10,13 @@ import { useRouteResults } from '@/state/routeResults'
 import { useViewer } from '@/state/viewer'
 import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
 import { ViewerControls } from '@/ui/ViewerControls'
+import { Legend } from '@/ui/Legend'
 import { BimShell } from './BimShell'
 import { Clipping } from './Clipping'
 import { Markers } from './Markers'
 import { OverlayPlane } from './OverlayPlane'
 import { PipeNetwork } from './PipeNetwork'
+import { buildScale } from './colors'
 
 export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex: number }) {
   const closeFloor = useSelection((s) => s.closeFloor)
@@ -27,13 +29,20 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
   const clip = useViewer((s) => s.clip)
   const clipHeight = useViewer((s) => s.clipHeight)
   const setClipHeight = useViewer((s) => s.setClipHeight)
+  const colorMode = useViewer((s) => s.colorMode)
 
   const floor = useQuery({
     queryKey: ['floor', modelId, floorIndex],
     queryFn: () => api.floorDetail(modelId, floorIndex),
   })
+  const walls = useQuery({
+    queryKey: ['walls', modelId, floorIndex],
+    queryFn: () => api.getWalls(modelId, floorIndex),
+    enabled: floor.data?.status === 'ready',
+  })
   const url = api.geometryUrl(modelId, floorIndex)
   const grid = floor.data?.grid
+  const scale = useMemo(() => buildScale(colorMode, walls.data ?? {}), [colorMode, walls.data])
 
   // Clear the route builder + results when switching floors/models.
   useEffect(() => {
@@ -97,7 +106,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
                   })
                 }}
               >
-                <BimShell url={url} />
+                <BimShell url={url} walls={walls.data} scale={scale} />
               </group>
             </Bounds>
             {floor.data && <Markers floor={floor.data} />}
@@ -127,6 +136,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
         </Canvas>
         <Loader />
         <ViewerControls grid={grid} />
+        <Legend scale={scale} walls={walls.data} />
         {floor.data && (
           <RouteBuilderPanel modelId={modelId} floorIndex={floorIndex} floor={floor.data} />
         )}
