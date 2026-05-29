@@ -1,9 +1,23 @@
 import { useAuth } from '@/state/auth'
+import { useSelection } from '@/state/selection'
 import { Login } from '@/ui/Login'
 import { ModelsView } from '@/ui/ModelsView'
+import { ModelView } from '@/ui/ModelView'
 import { Providers } from './providers'
 
-export default function App() {
+function Shell() {
   const authed = useAuth((s) => s.authed)
-  return <Providers>{authed ? <ModelsView /> : <Login />}</Providers>
+  const modelId = useSelection((s) => s.modelId)
+
+  if (!authed) return <Login />
+  if (modelId) return <ModelView modelId={modelId} />
+  return <ModelsView />
+}
+
+export default function App() {
+  return (
+    <Providers>
+      <Shell />
+    </Providers>
+  )
 }

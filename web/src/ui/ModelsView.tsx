@@ -2,9 +2,11 @@ import { useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useAuth } from '@/state/auth'
+import { useSelection } from '@/state/selection'
 
 export function ModelsView() {
   const logout = useAuth((s) => s.logout)
+  const openModel = useSelection((s) => s.openModel)
   const qc = useQueryClient()
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -12,6 +14,11 @@ export function ModelsView() {
 
   const upload = useMutation({
     mutationFn: (file: File) => api.uploadModel(file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
+  })
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteModel(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
   })
 
@@ -62,14 +69,29 @@ export function ModelsView() {
 
         <ul className="divide-y divide-neutral-200 overflow-hidden rounded-md border border-neutral-200 bg-white">
           {models.data?.map((m) => (
-            <li key={m.model_id} className="flex items-center justify-between px-4 py-3">
+            <li
+              key={m.model_id}
+              onClick={() => openModel(m.model_id)}
+              className="flex cursor-pointer items-center justify-between px-4 py-3 hover:bg-neutral-50"
+            >
               <div>
                 <p className="text-sm font-medium">{m.filename}</p>
                 <p className="text-xs text-neutral-500">
                   {m.storey_count} storeys · {m.status}
                 </p>
               </div>
-              <code className="text-xs text-neutral-400">{m.model_id}</code>
+              <div className="flex items-center gap-3">
+                <code className="text-xs text-neutral-400">{m.model_id}</code>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (confirm(`Delete ${m.filename}?`)) remove.mutate(m.model_id)
+                  }}
+                  className="text-xs text-neutral-400 hover:text-red-600"
+                >
+                  Delete
+                </button>
+              </div>
             </li>
           ))}
         </ul>
