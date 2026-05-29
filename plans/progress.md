@@ -1,6 +1,6 @@
 # IFCBox — Progress & Decision Log
 
-_Last updated: 2026-05-28_
+_Last updated: 2026-05-29_
 
 ---
 
@@ -97,47 +97,91 @@ output/
 
 ---
 
-## Phase 2 — Next Steps
+## Phase 2 — Engine Refactor & Backend API (DONE 2026-05-29)
 
-### 1. FastAPI Backend
+Full plan + rationale in [spec-api.md](spec-api.md). Grilled and built in one session.
 
-Wrap the pipeline in REST endpoints so the front-end can drive routing without the CLI:
+### Phase 2a — Engine refactor
 
-```
-POST /api/v1/models                     # upload IFC, returns model_id
-GET  /api/v1/models/{id}/storeys        # list storeys
-GET  /api/v1/models/{id}/storeys/{n}/terminals   # list flow terminals with positions
-GET  /api/v1/models/{id}/storeys/{n}/spaces      # list IfcSpaces with centroids
-POST /api/v1/models/{id}/route          # body: {floor, start_xyz, end_xyz, params}
-                                        # returns: {waypoints, length, glb_url}
-```
+The PoC orchestration that lived in `route.py`'s `cmd_route` was extracted into a
+library engine. The low-level `pipeline/*` modules are unchanged; a two-layer
+surface was added on top.
 
-Key decisions to make:
-- Synchronous (short models) vs async task queue (large models) — likely sync for Phase 2
-- Cache occupancy/cost grid per (model_id, floor) to avoid rebuilding on every route request
-- SQLite job log: model_id, floor, route params, output paths, timestamp
+| New / changed | What |
+|---|---|
+| `ifcbox/engine.py` | `PreparedFloor` (param-independent cached geometry) + `prepare_floor()` + `.npz`/json `save`/`load`; `RouteParams`/`RouteSegment`/`RouteResult`; `route()` (trunk + independent); `build_routing_cost()`; `build_route_mesh()` |
+| `ifcbox/resolver.py` | `PointAnchor` / `TerminalAnchor` / `RoomAnchor` + `resolve_anchor()` (room → centroid → nearest passable) |
+| `ifcbox/geometry.py` | per-floor building-shell glTF export (Z-up retained, Revit/IFC convention) |
+| `pipeline/zoning.py` | `build_zone_masks()` now returns **boolean** `corridor` / `door_zone` / `forbidden`; cost magnitudes applied at route time |
+| `pipeline/loader.py` | `extract_floor_spaces()` + `FloorGeometry.spaces` |
+| `route.py`, `demo_routes.py` | rewritten as thin engine clients |
 
-### 2. React 3D Viewer
+**Key decisions (with rationale):**
+- **Two-layer split** — `PreparedFloor` holds only param-independent geometry so it
+  caches once per `(model, floor, resolution)`; `route()` rebuilds the cheap cost grid
+  per request. Lets tuning params change without re-tessellating.
+- **Boolean zone masks** — magnitudes (`wall_penalty`, door cost, `corridor_weight`)
+  moved out of prep into `route()`. This is what makes `corridor_weight` a tunable
+  `RouteParams` field (was a baked-in 0.25).
+- **Resolution is a cache key**, not a per-request param (changing it invalidates geometry).
+- **Trunk vs independent** — multi-target defaults to `trunk` (shared-main Steiner via
+  `find_path` seeds); `independent` runs N separate paths. Trunk ≤ independent length.
+- **Cost parity preserved exactly** — `wall_penalty` acts as a ceiling on typed wall
+  cost, door zones drop to 30, corridor scales by `corridor_weight`, forbidden = ∞.
 
-Front-end UI for interactive route exploration:
+### Phase 2b — FastAPI backend (`api/`)
 
-- Load and render `pipe.glb` in Three.js / React Three Fiber
-- Display the building shell (from glTF export of obstacle meshes)
-- Click-to-pick start/end points on the 3D model
-- Show terminal markers; allow selecting from a list
-- Route result overlay with waypoint indicators
-- Floor switcher
+Thin HTTP/storage/orchestration layer over the engine — no engine logic in the API.
 
-### 3. Routing Quality Improvements
+- **Layout:** `api/main.py` (app, `/api/v1`, CORS, lifespan `init_db`), `store/db.py`
+  (SQLite index), `store/files.py` (disk layout), `cache.py` (PreparedFloor LRU over
+  disk), `tasks.py` (background prep), `schemas.py` (Pydantic), `routers/{models,floors,routes}.py`.
+- **Storage:** SQLite holds metadata/index only (`models`, `floor_prep`, `routes`);
+  arrays as `.npz` + json sidecar on disk; `shell.glb` and `pipe.glb` on disk.
+- **Execution:** lazy per-floor prep in a single-worker thread (serialized), progress
+  written to the `floor_prep` row; routing is synchronous on a prepared floor, **409**
+  if unprepared. Prep progress also streamed over a WebSocket.
+- **Endpoints:** model upload/list/get/delete; floor detail (terminals + spaces),
+  prepare (202), geometry (per-floor `shell.glb`), prepare-progress WS; route submit
+  (sync 200 / 409), history, fetch, mesh, delete. Anchors: point / terminal / room.
 
-- **Preferred routing zones** — beyond corridor preference, add explicit pipe chase / riser zone markup
-- **Multi-floor routing** — vertical risers between storeys (Phase 2 spec already planned)
-- **Clash detection** — check proposed route against existing services if present in the IFC
-- **Route variants** — return N alternative routes ranked by length / bend count
+### Tests (`tests/`, pytest)
 
-### 4. IFC Write-back
+`tests/test_engine.py` + `tests/test_api.py` — **19 tests, green in ~26s**. Cover:
+engine route parity vs the pre-refactor baseline (4.50 m, identical waypoints),
+`PreparedFloor` save/load roundtrip, trunk ≤ independent + branch points, room-anchor
+resolution, unknown-anchor errors, `corridor_weight` tunability; and the full API path
+(upload → background prepare → ready → geometry → point + room-trunk routes →
+fetch/mesh/history) plus 409 / 422 / 404 contracts and the prepare WS. The test IFC is
+gitignored, so tests `skip` cleanly when it is absent.
 
-Export the routed pipe as `IfcPipeSegment` elements back into the source IFC file (Phase 3). Currently only glTF and JSON are written.
+---
+
+## Phase 3 — Next Steps
+
+### 1. Frontend (designed against the Phase 2 API)
+
+See [spec-frontend.md](spec-frontend.md). React + react-three-fiber: load per-floor
+`shell.glb` + `pipe.glb`, pick endpoints (terminal/room list first, click-to-pick
+later), floor switcher, route history. Serve server glTF (not raw IFC); That Open
+Engine is an optional later upgrade.
+
+### 2. Routing quality
+
+- Explicit pipe-chase / riser zone markup beyond corridor preference
+- Multi-floor routing — vertical risers between storeys
+- Clash detection against existing services in the IFC
+- Route variants — N alternatives ranked by length / bend count
+- Multi-goal room targeting (reach any cell of a room, vs centroid)
+
+### 3. Scale-out (when triggered by real usage)
+
+PostgreSQL/PostGIS, MinIO, Celery/Redis, auth — see spec-pipeline.md §5.
+
+### 4. IFC write-back
+
+Export the routed pipe as `IfcPipeSegment` / `IfcPipeFitting` back into the source IFC
+(currently only glTF + JSON are written).
 
 ---
 
@@ -145,23 +189,30 @@ Export the routed pipe as `IfcPipeSegment` elements back into the source IFC fil
 
 ```
 ifcbox/
-├── ifcbox/
+├── ifcbox/                  # engine library (no web deps)
 │   ├── pipeline/
-│   │   ├── loader.py       # IFC loading, unit conversion, obstacle extraction
-│   │   ├── voxelizer.py    # 2D occupancy grid
-│   │   ├── sdf.py          # Clearance field + cost grid
-│   │   ├── router.py       # A* pathfinder
-│   │   ├── smoother.py     # Waypoint reduction
-│   │   ├── mesh.py         # Pipe mesh generation
-│   │   ├── export.py       # JSON + glTF export
-│   │   └── zoning.py       # Corridor preference, door zones, forbidden zones
-│   ├── debug.py            # Floor-plan debug PNGs
-│   └── visualize.py        # PyVista 3D viewer
-├── route.py                # CLI: single point-to-point route
-├── demo_routes.py          # CLI: batch demo (Flur → Bad/WC per apartment)
-├── plans/
-│   ├── spec.md             # Full technical specification
-│   └── progress.md         # This file
-└── output/
-    └── <model-stem>/       # Per-model output folder
+│   │   ├── loader.py        # IFC loading, unit conversion, obstacle + space extraction
+│   │   ├── voxelizer.py     # 2D occupancy grid
+│   │   ├── sdf.py           # Clearance field + cost grid
+│   │   ├── router.py        # A* pathfinder (direction-aware, multi-source seeds)
+│   │   ├── smoother.py      # Waypoint reduction
+│   │   ├── mesh.py          # Pipe mesh generation
+│   │   ├── export.py        # JSON + glTF export
+│   │   └── zoning.py        # Boolean corridor / door / forbidden masks
+│   ├── engine.py            # PreparedFloor + prepare_floor() + route()
+│   ├── resolver.py          # Point/Terminal/Room anchors → voxel
+│   ├── geometry.py          # Building-shell glTF export
+│   ├── debug.py             # Floor-plan debug PNGs
+│   └── visualize.py         # PyVista 3D viewer
+├── api/                     # FastAPI backend (imports ifcbox)
+│   ├── main.py  deps.py  cache.py  tasks.py  schemas.py
+│   ├── store/   (db.py, files.py)
+│   └── routers/ (models.py, floors.py, routes.py)
+├── route.py                 # CLI: single route (thin engine client)
+├── demo_routes.py           # CLI: batch Steiner demo (thin engine client)
+├── tests/                   # pytest: test_engine.py, test_api.py
+├── plans/                   # README (index), spec-pipeline, spec-api, spec-frontend, progress
+├── docs/architecture.md     # structural reference
+├── data/                    # API runtime store (gitignored)
+└── output/<model-stem>/     # CLI per-model output (gitignored)
 ```
