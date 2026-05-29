@@ -76,17 +76,17 @@ source .venv/bin/activate                          # needs requirements-dev.txt 
 
 # inspect the model
 python route.py model.ifc --list-floors
-python route.py model.ifc --floor 6 --list-spaces
-python route.py model.ifc --floor 6 --list-terminals
+python route.py model.ifc --floor 2 --list-spaces
+python route.py model.ifc --floor 2 --list-terminals
 
 # route between two world points, open the PyVista viewer
-python route.py model.ifc --floor 6 --start-xyz 5.3,41.8,6.9 --end-xyz 9.3,42.4,6.9
+python route.py model.ifc --floor 2 --start-xyz 5.3,41.8,6.9 --end-xyz 9.3,42.4,6.9
 
 # route between rooms (IfcSpace GlobalIds), export only, write debug PNGs + shell/walls/rooms
-python route.py model.ifc --floor 6 --start-room <space_id> --end-room <space_id> --no-view --debug --shell
+python route.py model.ifc --floor 2 --start-room <space_id> --end-room <space_id> --no-view --debug --shell
 
 # batch demo: Flur → adjacent rooms per apartment (Steiner trees)
-python demo_routes.py model.ifc --floor 6 --no-view
+python demo_routes.py model.ifc --floor 2 --no-view
 ```
 
 Outputs land in `output/<model-stem>/` — `route.json`, `pipe.glb`, and (with `--debug`) `debug_occupancy.png`, `debug_clearance.png`, `debug_scene.png`. Useful flags: `--clearance-weight`, `--wall-penalty`, `--bend-penalty`, `--corridor-weight`, `--strict-doors`.
@@ -123,7 +123,7 @@ The tests skip cleanly if the test IFC isn't present.
 
 ## Notes & troubleshooting
 
-- **Which floor?** Pick a residential/occupied storey with `IfcSpace`s (rooms) — the demo model's floor 6 (`OKFF OG1`) is a good example.
+- **Which floor?** Pick a residential/occupied storey with `IfcSpace`s (rooms) — the demo model's floor 2 (`OKFF OG1`) is a good example. (Raw-deck levels named `OKRD` / `UKRD` — top / bottom of structural slab in German naming — are filtered out of the storeys list automatically.)
 - **Prepare is slow / killed:** preparing a large IFC tessellates a lot of geometry; on a memory-limited host it can run out of RAM. Locally that's fine; hosted, the free Render 512 MB tier won't hold the 38 MB demo IFC — try a smaller model or upgrade the instance.
 - **"Route apartments" button missing:** appears only on prepared floors that have at least one named hallway (matching `Flur` / `Korridor` / `Diele` etc.). For floors prepared before this feature shipped, the GET endpoint backfills `apartments.json` on first hit; you can also click the **↻** button to force a re-discovery.
 - **"Floor not prepared" (409):** prepare the floor first — routing and geometry need the cached `PreparedFloor`.

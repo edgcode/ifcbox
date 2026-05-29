@@ -4,11 +4,11 @@ IFCBox — pipe auto-router CLI (thin client over ifcbox.engine).
 
 Usage examples:
   python route.py model.ifc --list-floors
-  python route.py model.ifc --floor 6 --list-terminals
-  python route.py model.ifc --floor 6 --list-spaces
-  python route.py model.ifc --floor 6 --start-xyz 5.3,41.8,6.9 --end-xyz 9.3,42.4,6.9
-  python route.py model.ifc --floor 6 --start <global_id> --end <global_id> --debug
-  python route.py model.ifc --floor 6 --start-room <space_id> --end-room <space_id>
+  python route.py model.ifc --floor 2 --list-terminals
+  python route.py model.ifc --floor 2 --list-spaces
+  python route.py model.ifc --floor 2 --start-xyz 5.3,41.8,6.9 --end-xyz 9.3,42.4,6.9
+  python route.py model.ifc --floor 2 --start <global_id> --end <global_id> --debug
+  python route.py model.ifc --floor 2 --start-room <space_id> --end-room <space_id>
 """
 
 from __future__ import annotations

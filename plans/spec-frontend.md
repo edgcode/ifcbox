@@ -191,7 +191,7 @@ Apartment-separating / corridor walls in this model carry a `Pset_WallCommon.Fir
 - Optional: a "highlight apartments" toggle that tints the room-type overlay by apartment-id instead of room type (reuses the overlay-plane plumbing).
 
 ### Sequencing
-- [x] **A-1** `ifcbox/apartments.py` (shared discovery) + door→host-wall→fire-rating. Validated on floor 6: 4 apartments × {6, 6, 6, 3} rooms, matches the CLI demo.
+- [x] **A-1** `ifcbox/apartments.py` (shared discovery) + door→host-wall→fire-rating. Validated on `OKFF OG1` (storey index 2 after raw-deck filter; was 6 before): 4 apartments × {6, 6, 6, 3} rooms, matches the CLI demo.
 - [x] **A-2** prepare writes `apartments.json`; `GET …/apartments` endpoint + lazy backfill + `POST …/apartments/refresh`.
 - [x] **A-3** front-end "Route apartments (N)" → auto-create systems → Route all; small ↻ refresh button next to it.
 

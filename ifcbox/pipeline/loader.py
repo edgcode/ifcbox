@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
+# Raw-deck levels (German: Oberkante/Unterkante Rohdecke — top/bottom of the
+# structural slab). These aren't finished floors and aren't routable; we only
+# want OKFF (Oberkante Fertigfußboden) / generic finished levels.
+_RAW_DECK_RE = re.compile(r"^\s*(OKRD|UKRD)\b", re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
 
@@ -177,15 +183,22 @@ def list_storeys(model) -> list[StoreyInfo]:
     if unit_scale != 1.0:
         logger.info("Length unit scale: %.6f (project units → metres)", unit_scale)
     storeys = []
+    skipped = 0
     for s in model.by_type("IfcBuildingStorey"):
+        name = s.Name or f"Storey {s.id()}"
+        if _RAW_DECK_RE.match(name):
+            skipped += 1
+            continue
         elevation = _get_elevation(s, unit_scale)
         storeys.append(StoreyInfo(
             id=s.id(),
-            name=s.Name or f"Storey {s.id()}",
+            name=name,
             elevation=elevation,
             height=0.0,
         ))
     storeys.sort(key=lambda s: s.elevation)
+    if skipped:
+        logger.info("list_storeys: skipped %d raw-deck level(s) (OKRD/UKRD)", skipped)
 
     # Infer storey heights from successive elevations
     for i, s in enumerate(storeys[:-1]):
