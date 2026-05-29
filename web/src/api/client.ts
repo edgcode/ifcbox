@@ -76,6 +76,8 @@ export const api = {
     withToken(`/api/v1/models/${id}/floors/${n}/overlays/${kind}`),
   getWalls: (id: string, n: number) => req<Walls>(`/models/${id}/floors/${n}/walls`),
   getApartments: (id: string, n: number) => req<Apartment[]>(`/models/${id}/floors/${n}/apartments`),
+  refreshApartments: (id: string, n: number) =>
+    req<Apartment[]>(`/models/${id}/floors/${n}/apartments/refresh`, { method: 'POST' }),
   getRoomClasses: () => req<RoomClass[]>('/room-classes'),
 
   submitRoute: (id: string, n: number, body: RouteRequest) =>

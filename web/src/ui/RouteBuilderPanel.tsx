@@ -92,6 +92,13 @@ export function RouteBuilderPanel({
     staleTime: Infinity,
   })
 
+  const refreshApartments = useMutation({
+    mutationFn: () => api.refreshApartments(modelId, floorIndex),
+    onSuccess: (apts) => {
+      qc.setQueryData(['apartments', modelId, floorIndex], apts)
+    },
+  })
+
   const completeCount = groups.filter((g) => g.source && g.targets.length > 0).length
   const [q, setQ] = useState('')
   const items = useMemo<AnchorSel[]>(() => {
@@ -276,19 +283,29 @@ export function RouteBuilderPanel({
         {submitAll.isPending ? 'Routing…' : `Route all (${completeCount})`}
       </button>
 
-      {apartmentsQ.data && apartmentsQ.data.length > 0 && (
-        <button
-          onClick={() => {
-            clearResults()
-            loadApartments(apartmentsQ.data!)
-            submitAll.mutate()
-          }}
-          disabled={submitAll.isPending}
-          className="rounded-md border border-purple-400 bg-purple-600/10 px-2 py-1.5 text-sm font-medium text-purple-700 hover:bg-purple-600/20 disabled:opacity-40 dark:border-purple-500 dark:text-purple-300"
-          title="Auto-discover apartments (Flur → reachable rooms, stopped at fire-rated walls) and route one shared trunk per apartment."
-        >
-          Route apartments ({apartmentsQ.data.length})
-        </button>
+      {floor.status === 'ready' && (
+        <div className="flex gap-1">
+          <button
+            onClick={() => {
+              clearResults()
+              loadApartments(apartmentsQ.data ?? [])
+              submitAll.mutate()
+            }}
+            disabled={submitAll.isPending || !apartmentsQ.data || apartmentsQ.data.length === 0}
+            className="flex-1 rounded-md border border-purple-400 bg-purple-600/10 px-2 py-1.5 text-sm font-medium text-purple-700 hover:bg-purple-600/20 disabled:opacity-40 dark:border-purple-500 dark:text-purple-300"
+            title="Auto-discover apartments (Flur → reachable rooms, stopped at fire-rated walls) and route one shared trunk per apartment."
+          >
+            Route apartments ({apartmentsQ.data?.length ?? '…'})
+          </button>
+          <button
+            onClick={() => refreshApartments.mutate()}
+            disabled={refreshApartments.isPending}
+            className="rounded-md border border-purple-400 px-2 text-purple-700 hover:bg-purple-600/10 disabled:opacity-40 dark:border-purple-500 dark:text-purple-300"
+            title="Re-discover apartments on this floor (use after engine updates)."
+          >
+            {refreshApartments.isPending ? '…' : '↻'}
+          </button>
+        </div>
       )}
       {submitAll.error && (
         <p className="text-xs text-red-600 dark:text-red-400">

@@ -125,6 +125,29 @@ async def floor_walls(model_id: str, n: int):
     return FileResponse(path, media_type="application/json")
 
 
+def _recompute_apartments(model_id: str, n: int) -> list:
+    from ifcbox.apartments import discover_apartments
+    from ifcbox.pipeline.loader import list_storeys, load_model
+    prep = cache.get_prepared(model_id, n)
+    ifc = blobs.read_path(keys.model_ifc(model_id))
+    if prep is None or ifc is None:
+        raise HTTPException(409, {"detail": "floor not prepared"})
+    model = load_model(ifc)
+    storey = list_storeys(model)[n]
+    apts = discover_apartments(model, storey, prep.site_transform)
+    blobs.write_text(keys.floor_apartments(model_id, n), json.dumps(apts))
+    blobs.commit(keys.floor_apartments(model_id, n))
+    return apts
+
+
+@router.post("/models/{model_id}/floors/{n}/apartments/refresh")
+async def floor_apartments_refresh(model_id: str, n: int):
+    _require_floor(model_id, n)
+    if _floor_status(model_id, n) != "ready":
+        raise HTTPException(409, {"detail": "floor not prepared"})
+    return _recompute_apartments(model_id, n)
+
+
 @router.get("/models/{model_id}/floors/{n}/apartments")
 async def floor_apartments(model_id: str, n: int):
     _require_floor(model_id, n)
@@ -134,17 +157,7 @@ async def floor_apartments(model_id: str, n: int):
     path = blobs.read_path(keys.floor_apartments(model_id, n))
     if path is None:
         # Lazy backfill for floors prepared before apartments.json existed.
-        from ifcbox.apartments import discover_apartments
-        from ifcbox.pipeline.loader import list_storeys, load_model
-        prep = cache.get_prepared(model_id, n)
-        ifc = blobs.read_path(keys.model_ifc(model_id))
-        if prep is None or ifc is None:
-            raise HTTPException(409, {"detail": "floor not prepared"})
-        model = load_model(ifc)
-        storey = list_storeys(model)[n]
-        apts = discover_apartments(model, storey, prep.site_transform)
-        blobs.write_text(keys.floor_apartments(model_id, n), json.dumps(apts))
-        blobs.commit(keys.floor_apartments(model_id, n))
+        _recompute_apartments(model_id, n)
         path = blobs.read_path(keys.floor_apartments(model_id, n))
     return FileResponse(path, media_type="application/json")
 
