@@ -157,31 +157,54 @@ gitignored, so tests `skip` cleanly when it is absent.
 
 ---
 
-## Phase 3 — Next Steps
+## Phase 3 — Frontend & Deployment
 
-### 1. Frontend (designed against the Phase 2 API)
+Plans: [spec-frontend.md](spec-frontend.md), [spec-deploy.md](spec-deploy.md).
 
-See [spec-frontend.md](spec-frontend.md). React + react-three-fiber: load per-floor
-`shell.glb` + `pipe.glb`, pick endpoints (terminal/room list first, click-to-pick
-later), floor switcher, route history. Serve server glTF (not raw IFC); That Open
-Engine is an optional later upgrade.
+### Frontend MVP (`web/`) — built 2026-05-29
 
-### 2. Routing quality
+React + TypeScript (Vite), react-three-fiber + drei, Zustand + TanStack Query,
+Tailwind v4. Dev: Vite proxies `/api` → uvicorn. Prod (planned): FastAPI serves the
+built bundle (single origin).
 
-- Explicit pipe-chase / riser zone markup beyond corridor preference
-- Multi-floor routing — vertical risers between storeys
-- Clash detection against existing services in the IFC
-- Route variants — N alternatives ranked by length / bend count
-- Multi-goal room targeting (reach any cell of a room, vs centroid)
+| Area | Status |
+|---|---|
+| Auth gate | token login (localStorage, `X-App-Token`); blank allowed for local dev |
+| Models | upload IFC (multipart), list, open, delete |
+| Floors | per-floor status; Prepare with live **WebSocket** progress bar |
+| 3D viewer | per-floor `shell.glb` (useGLTF), Z-up camera, OrbitControls, one-time Bounds fit |
+| Markers | terminals (amber) + room centroids (cyan + name labels), clickable |
+| Picking | markers + raycast point-on-shell → point / terminal / room anchors |
+| Routing | multi-source **systems** (N independent source→targets, trunk/independent), "Route all" |
+| Render | per-system `pipe.glb` in system colour + junction spheres; readout + glb download |
 
-### 3. Scale-out (when triggered by real usage)
+Key fixes / decisions during the build:
+- **Coordinate frame:** the shell glTF and CLI PyVista view must use site→world
+  (`SiteTransform.world_mesh`); `transform_mesh` is world→site. Markers and the route
+  pipe are true world coords, so the shell rendered detached until fixed.
+- **Camera:** only the shell sits inside drei `<Bounds>`, with `observe` OFF — fit once
+  on load; clicking a marker no longer refits/flies the camera.
+- Viewer renders server glTF only (no That Open Engine).
+- The frontend rides existing Phase-2b endpoints; only overlays (F-7) need new API.
 
-PostgreSQL/PostGIS, MinIO, Celery/Redis, auth — see spec-pipeline.md §5.
+### Frontend — remaining
 
-### 4. IFC write-back
+- **F-7:** occupancy/SDF overlays (server PNG on a floor-aligned plane) + clipping/section.
+  Needs backend **D-4** (overlay PNG endpoints + floor `grid` meta for plane alignment).
+- **F-8:** polish — error/empty/loading states, marker clustering if dense, per-system
+  route history (dropped in the F-6b rewrite).
 
-Export the routed pipe as `IfcPipeSegment` / `IfcPipeFitting` back into the source IFC
-(currently only glTF + JSON are written).
+### Deployment — not started ([spec-deploy.md](spec-deploy.md) D-1…D-6)
+
+Pluggable storage (Local FS+SQLite ↔ R2+Postgres), shared-secret auth, multi-stage
+Dockerfile, single Render web service.
+
+### Later — routing quality / scale-out / write-back
+
+- Pipe-chase / riser zone markup; multi-floor risers; clash detection; route variants;
+  multi-goal room targeting (reach any cell vs centroid).
+- Scale-out: PostGIS, MinIO, Celery/Redis, real multi-user auth (spec-pipeline.md §5).
+- IFC write-back: `IfcPipeSegment` / `IfcPipeFitting` into the source IFC (currently glTF + JSON only).
 
 ---
 
@@ -208,10 +231,12 @@ ifcbox/
 │   ├── main.py  deps.py  cache.py  tasks.py  schemas.py
 │   ├── store/   (db.py, files.py)
 │   └── routers/ (models.py, floors.py, routes.py)
+├── web/                     # React + TS frontend (Vite)
+│   └── src/ (app/, api/, viewer/, ui/, state/, hooks/)
 ├── route.py                 # CLI: single route (thin engine client)
 ├── demo_routes.py           # CLI: batch Steiner demo (thin engine client)
 ├── tests/                   # pytest: test_engine.py, test_api.py
-├── plans/                   # README (index), spec-pipeline, spec-api, spec-frontend, progress
+├── plans/                   # README (index), spec-pipeline, spec-api, spec-frontend, spec-deploy, progress
 ├── docs/architecture.md     # structural reference
 ├── data/                    # API runtime store (gitignored)
 └── output/<model-stem>/     # CLI per-model output (gitignored)
