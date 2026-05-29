@@ -1,12 +1,16 @@
 # Render blueprint. Secrets (sync:false) are set in the Render dashboard.
-# Note: floor prep tessellates a large IFC — the free 512MB plan may OOM;
-# bump `plan` to standard (2GB) if prep is killed.
+# Note: floor prep tessellates IFC meshes; standard (2GB) holds the 38MB demo
+# model. Region changes here only apply to NEW services created from the
+# blueprint — Render won't migrate an existing service. To move regions, either
+# use Render's dashboard region migration (paid plans) or delete the existing
+# service and re-sync this blueprint.
 services:
   - type: web
     name: ifcbox
     runtime: docker
     dockerfilePath: ./Dockerfile
-    plan: free
+    plan: standard
+    region: frankfurt
     healthCheckPath: /health
     envVars:
       - key: IFCBOX_STORAGE
