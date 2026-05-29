@@ -1,9 +1,13 @@
 """
-Zone-aware cost modifiers.
+Zone geometry masks (param-independent).
 
-Produces two overlays applied to the A* cost grid:
-  1. Corridor preference  — voxels inside circulation spaces are cheaper to route through
-  2. Door crossing zones  — wall voxels above doors are cheaper to punch through
+Produces boolean masks that the engine's route() turns into cost modifiers:
+  1. corridor   — free voxels inside circulation spaces (cheaper to route through)
+  2. door_zone  — wall voxels above doors (cheaper to punch through)
+  3. forbidden  — free voxels inside stairwells / shafts (never routed)
+
+Cost magnitudes (corridor_weight, door-crossing cost, wall_penalty) are applied
+downstream from request params, not here — these masks depend on geometry only.
 """
 
 from __future__ import annotations
@@ -41,70 +45,40 @@ PREFERRED_CORRIDOR_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
-# Cost multiplier applied to free voxels inside circulation spaces
-CORRIDOR_COST_MULTIPLIER = 0.25   # 4× cheaper than open room space
+# Default cost multiplier applied to free voxels inside circulation spaces.
+# Exposed at route time as RouteParams.corridor_weight.
+DEFAULT_CORRIDOR_WEIGHT = 0.25    # 4× cheaper than open room space
 
-# ── Door zone identification ──────────────────────────────────────────────────
-
-# Reduced wall penalty for crossing at a door location (vs default 500)
+# Reduced wall crossing cost at a door location (vs default wall_penalty ~500)
 DOOR_ZONE_WALL_COST = 30.0        # ~6% of normal wall penalty
 
-# Half-width of the door crossing zone (each side of door centreline), metres
-DOOR_ZONE_HALF_WIDTH = 0.6        # covers a 1.2m swath ≈ standard door width
 
-
-def build_zone_modifiers(
+def build_zone_masks(
     model,
     meta: VoxelMeta,
     pipe_z: float,
     site_xform,
-    occupancy: np.ndarray,
-    wall_penalty: float = 500.0,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Build zone modifier arrays:
+    Build param-independent boolean zone masks for a floor.
 
-    corridor_mask  : float [nx, ny]  — cost multiplier for free voxels (< 1.0 = preferred)
-    door_wall_cost : float [nx, ny]  — replacement wall cost at door crossing zones
-    forbidden_mask : bool  [nx, ny]  — free voxels that must not be routed through
-                                       (Treppenraum, lift shafts, etc.)
+    corridor  : bool [nx, ny]  — voxels inside preferred circulation spaces
+    door_zone : bool [nx, ny]  — wall voxels above door openings (cheap to cross)
+    forbidden : bool [nx, ny]  — free voxels that must not be routed (stairwells, shafts)
 
-    Returns (corridor_mask, door_wall_cost, forbidden_mask).
+    Returns (corridor, door_zone, forbidden). Cost magnitudes are applied by the
+    engine's route() from request params.
     """
     nx, ny = meta.shape
-    corridor_mask = np.ones((nx, ny), dtype=np.float32)
-    door_wall_cost = np.full((nx, ny), wall_penalty, dtype=np.float32)
-    forbidden_mask = np.zeros((nx, ny), dtype=bool)
+    corridor = np.zeros((nx, ny), dtype=bool)
+    door_zone = np.zeros((nx, ny), dtype=bool)
+    forbidden = np.zeros((nx, ny), dtype=bool)
 
-    _apply_corridor_preference(model, meta, pipe_z, site_xform, corridor_mask)
-    _apply_forbidden_zones(model, meta, pipe_z, site_xform, forbidden_mask)
-    _apply_door_zones(model, meta, pipe_z, site_xform, occupancy, door_wall_cost)
+    _apply_corridor_preference(model, meta, pipe_z, site_xform, corridor)
+    _apply_forbidden_zones(model, meta, pipe_z, site_xform, forbidden)
+    _apply_door_zones(model, meta, pipe_z, site_xform, door_zone)
 
-    return corridor_mask, door_wall_cost, forbidden_mask
-
-
-def apply_zone_modifiers(
-    cost_grid: np.ndarray,
-    occupancy: np.ndarray,
-    corridor_mask: np.ndarray,
-    door_wall_cost: np.ndarray,
-) -> np.ndarray:
-    """
-    Apply corridor and door-zone modifiers to an existing cost grid.
-
-    Free voxels in corridors are scaled down by corridor_mask.
-    Wall voxels at door locations get door_wall_cost instead of wall_penalty.
-    """
-    modified = cost_grid.copy()
-
-    # Scale free-space cost in corridors
-    free = ~occupancy
-    modified[free] *= corridor_mask[free]
-
-    # Override wall cost at door zones (only where door_wall_cost < current cost)
-    modified[occupancy] = np.minimum(modified[occupancy], door_wall_cost[occupancy])
-
-    return modified
+    return corridor, door_zone, forbidden
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -141,8 +115,8 @@ def _apply_forbidden_zones(model, meta, pipe_z, site_xform, forbidden_mask):
     logger.info("Marked %d forbidden zones (Treppenraum etc.)", found)
 
 
-def _apply_corridor_preference(model, meta, pipe_z, site_xform, corridor_mask):
-    """Mark voxels inside preferred circulation spaces with corridor cost multiplier."""
+def _apply_corridor_preference(model, meta, pipe_z, site_xform, corridor):
+    """Mark voxels inside preferred circulation spaces as corridor (True)."""
     import ifcopenshell.geom
     import ifcopenshell.util.element
     import trimesh
@@ -170,9 +144,7 @@ def _apply_corridor_preference(model, meta, pipe_z, site_xform, corridor_mask):
             # Slice at pipe_z and fill
             section = mesh.section(plane_origin=[0, 0, pipe_z], plane_normal=[0, 0, 1])
             if section is not None and len(section.vertices) >= 3:
-                mask = np.zeros(meta.shape, dtype=bool)
-                _rasterize_section_3d(section, mask, meta)
-                corridor_mask[mask] = CORRIDOR_COST_MULTIPLIER
+                _rasterize_section_3d(section, corridor, meta)
                 found += 1
         except Exception as e:
             logger.debug("Corridor space %r geometry failed: %s", name, e)
@@ -180,8 +152,8 @@ def _apply_corridor_preference(model, meta, pipe_z, site_xform, corridor_mask):
     logger.info("Applied corridor preference to %d circulation spaces", found)
 
 
-def _apply_door_zones(model, meta, pipe_z, site_xform, occupancy, door_wall_cost):
-    """Mark wall voxels above door openings with reduced crossing cost."""
+def _apply_door_zones(model, meta, pipe_z, site_xform, door_zone):
+    """Mark wall voxels above door openings as door crossing zones (True)."""
     import ifcopenshell.util.placement
 
     found = 0
@@ -223,7 +195,7 @@ def _apply_door_zones(model, meta, pipe_z, site_xform, occupancy, door_wall_cost
             door_centre = site_pos[:2]
 
             _mark_door_zone(
-                door_wall_cost, meta, door_centre, site_x, wall_normal, hw
+                door_zone, meta, door_centre, site_x, wall_normal, hw
             )
             found += 1
         except Exception as e:
@@ -233,7 +205,7 @@ def _apply_door_zones(model, meta, pipe_z, site_xform, occupancy, door_wall_cost
 
 
 def _mark_door_zone(
-    door_wall_cost: np.ndarray,
+    door_zone: np.ndarray,
     meta: VoxelMeta,
     centre: np.ndarray,
     along_wall: np.ndarray,   # unit vec along door face (X of door)
@@ -241,17 +213,17 @@ def _mark_door_zone(
     half_width: float,
     thru_depth: float = 0.3,  # metres through the wall to mark
 ):
-    """Mark a rectangular slot in door_wall_cost with DOOR_ZONE_WALL_COST."""
+    """Mark a rectangular slot in the boolean door_zone mask."""
     r = meta.resolution
 
     # Sample points along the door width
     steps_along = max(1, int(np.ceil(half_width / r)))
     steps_thru = max(1, int(np.ceil(thru_depth / r)))
 
+    nx, ny = door_zone.shape
     for i in range(-steps_along, steps_along + 1):
         for j in range(-steps_thru, steps_thru + 1):
             pt = centre + (i * r) * along_wall + (j * r) * thru_wall
             vx, vy = meta.world_to_voxel(pt)
-            nx, ny = door_wall_cost.shape
             if 0 <= vx < nx and 0 <= vy < ny:
-                door_wall_cost[vx, vy] = min(door_wall_cost[vx, vy], DOOR_ZONE_WALL_COST)
+                door_zone[vx, vy] = True

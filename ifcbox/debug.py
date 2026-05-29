@@ -72,13 +72,12 @@ def render_debug_scene(
     model,
     storey,
     site_xform,
-    corridor_mask: np.ndarray,
-    door_wall_cost: np.ndarray,
+    corridor: np.ndarray,
+    door_zone: np.ndarray,
     wall_costs: np.ndarray | None = None,
-    forbidden_mask: np.ndarray | None = None,
+    forbidden: np.ndarray | None = None,
     waypoints: list[np.ndarray] | None = None,
     output_path: str = "output/debug_scene.png",
-    wall_penalty: float = 500.0,
 ):
     """
     Render a rich floor-plan debug image.
@@ -104,8 +103,8 @@ def render_debug_scene(
     free_rgba[free.T, :3] = [r, g, b]
     free_rgba[free.T, 3] = 1.0
 
-    # Corridor overlay — tint green where corridor_mask < 1
-    corr = (corridor_mask < 1.0) & free
+    # Corridor overlay — tint green where corridor membership is set
+    corr = corridor & free
     cr, cg, cb, _ = to_rgba(COLOUR_CORRIDOR)
     free_rgba[corr.T, :3] = [cr, cg, cb]
     free_rgba[corr.T, 3] = 1.0
@@ -117,15 +116,15 @@ def render_debug_scene(
     _draw_obstacle_layers(ax, model, meta, storey, site_xform, nx, ny)
 
     # ── Layer 3: forbidden zones (Treppenraum etc.) ───────────────────────────
-    if forbidden_mask is not None and forbidden_mask.any():
+    if forbidden is not None and forbidden.any():
         forb_rgba = np.zeros((ny, nx, 4), dtype=np.float32)
         fr, fg, fb, _ = to_rgba(COLOUR_FORBIDDEN)
-        forb_rgba[forbidden_mask.T, :] = [fr, fg, fb, 0.35]
+        forb_rgba[forbidden.T, :] = [fr, fg, fb, 0.35]
         ax.imshow(forb_rgba, origin="lower", interpolation="nearest",
                   extent=[0, nx, 0, ny])
 
     # ── Layer 4: door crossing zones ─────────────────────────────────────────
-    reduced = occupancy & (door_wall_cost < wall_penalty * 0.5)
+    reduced = occupancy & door_zone
     if reduced.any():
         door_rgba = np.zeros((ny, nx, 4), dtype=np.float32)
         dr, dg, db, _ = to_rgba(COLOUR_DOOR_ZONE)

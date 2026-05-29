@@ -130,6 +130,7 @@ class FloorGeometry:
     meshes: list            # list[trimesh.Trimesh] — in site-aligned coords
     mesh_types: list        # list[str] — wall type per mesh (WALL_TYPE_*)
     terminals: dict         # {ifc_id: np.ndarray([x, y, z])} — in site-aligned coords
+    spaces: dict            # {global_id: {"name": str, "centroid": [x,y,z]}} — site-aligned
     bounds_min: np.ndarray  # [x, y] metres, site-aligned
     bounds_max: np.ndarray  # [x, y] metres, site-aligned
     pipe_z: float           # absolute Z for pipe routing (Z is unchanged by 2D rotation)
@@ -259,6 +260,9 @@ def extract_floor_geometry(model, storey: StoreyInfo) -> FloorGeometry:
     terminals = _extract_terminals(model, storey, site_xform)
     logger.info("Found %d flow terminals on storey '%s'", len(terminals), storey.name)
 
+    spaces = extract_floor_spaces(model, pipe_z, site_xform)
+    logger.info("Found %d spaces on storey '%s'", len(spaces), storey.name)
+
     bounds_min, bounds_max = _compute_xy_bounds(meshes)
 
     return FloorGeometry(
@@ -266,6 +270,7 @@ def extract_floor_geometry(model, storey: StoreyInfo) -> FloorGeometry:
         meshes=meshes,
         mesh_types=mesh_types,
         terminals=terminals,
+        spaces=spaces,
         bounds_min=bounds_min,
         bounds_max=bounds_max,
         pipe_z=storey.elevation + PIPE_Z_OFFSET,
@@ -290,6 +295,41 @@ def _extract_terminals(model, storey: StoreyInfo, site_xform: SiteTransform) -> 
             logger.debug("Terminal placement failed for %s: %s", element.GlobalId, e)
 
     return terminals
+
+
+def extract_floor_spaces(model, pipe_z: float, site_xform: SiteTransform) -> dict:
+    """Return {space_global_id: {"name", "centroid"}} for IfcSpaces overlapping pipe_z.
+
+    Centroid is the mean of the space mesh vertices, forced to the routing
+    elevation, in site-aligned coords. Used by the resolver for `room` anchors
+    (decision #10: centroid → nearest passable voxel).
+    """
+    import ifcopenshell.geom
+
+    settings = ifcopenshell.geom.settings()
+    settings.set(settings.USE_WORLD_COORDS, True)
+
+    spaces = {}
+    for space in model.by_type("IfcSpace"):
+        try:
+            shape = ifcopenshell.geom.create_shape(settings, space)
+            verts = np.array(shape.geometry.verts).reshape(-1, 3)
+            if len(verts) == 0:
+                continue
+            z = verts[:, 2]
+            if z.max() < pipe_z - 0.5 or z.min() > pipe_z + 0.5:
+                continue
+            world_c = verts.mean(axis=0)
+            world_c[2] = pipe_z
+            site_c = site_xform.to_site(world_c.reshape(1, 3))[0]
+            spaces[space.GlobalId] = {
+                "name": (space.Name or "").strip(),
+                "centroid": site_c,
+            }
+        except Exception as e:
+            logger.debug("Space geometry failed for %s: %s", space.GlobalId, e)
+
+    return spaces
 
 
 def _element_on_storey(element, storey: StoreyInfo, model) -> bool:

@@ -440,11 +440,11 @@ def find_route_pairs(model, storey, pipe_z, site_xform, cost_grid=None, meta=Non
 
 def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
     from ifcbox.debug import render_debug_scene
+    from ifcbox.engine import RouteParams, build_routing_cost, prepare_floor
     from ifcbox.pipeline.export import export_gltf, export_json
     from ifcbox.pipeline.loader import extract_floor_geometry, list_storeys, load_model
     from ifcbox.pipeline.mesh import build_pipe_mesh
     from ifcbox.pipeline.smoother import path_length
-    from route import build_floor_cost_grid
 
     _strict = use_strict_doors
 
@@ -472,8 +472,16 @@ def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
     st = floor_geom.site_transform
 
     logger.info("Building cost grid (shared across all routes)...")
-    (occupancy, wall_costs, meta, cost_grid,
-     corridor_mask, door_wall_cost, forbidden_mask) = build_floor_cost_grid(args, model, floor_geom)
+    prep = prepare_floor(model, storey, floor_index=floor_idx,
+                         model_id=Path(ifc_path).stem, resolution=args.resolution,
+                         geom=floor_geom)
+    params = RouteParams(
+        clearance_weight=args.clearance_weight, wall_penalty=args.wall_penalty,
+        bend_penalty=args.bend_penalty, strict_doors=args.strict_doors,
+    )
+    cost_grid = build_routing_cost(prep, params)
+    occupancy, wall_costs, meta = prep.occupancy, prep.wall_costs, prep.meta
+    corridor, door_zone, forbidden = prep.corridor, prep.door_zone, prep.forbidden
 
     logger.info("Finding route pairs (Flur → adjacent room)...")
     pairs = find_route_pairs(model, storey, floor_geom.pipe_z, st,
@@ -494,11 +502,9 @@ def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
     render_debug_scene(
         occupancy=occupancy, meta=meta, model=model,
         storey=storey, site_xform=st,
-        corridor_mask=corridor_mask, door_wall_cost=door_wall_cost,
-        forbidden_mask=forbidden_mask,
+        corridor=corridor, door_zone=door_zone, forbidden=forbidden,
         waypoints=None,
         output_path=str(output_dir / "debug_scene_no_route.png"),
-        wall_penalty=args.wall_penalty,
     )
 
     all_waypoints = []
@@ -551,10 +557,9 @@ def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
     logger.info("Rendering combined debug scene with all routes...")
     _render_combined_scene(
         occupancy, meta, model, storey, st,
-        corridor_mask, door_wall_cost, wall_costs, forbidden_mask,
+        corridor, door_zone, wall_costs, forbidden,
         all_waypoints, all_route_labels,
         str(output_dir / "debug_scene_all_routes.png"),
-        args.wall_penalty,
     )
 
     logger.info("Done in %.1fs. Outputs in output/", time.time() - t0)
@@ -571,8 +576,8 @@ def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
 
 
 def _render_combined_scene(occupancy, meta, model, storey, site_xform,
-                            corridor_mask, door_wall_cost, wall_costs, forbidden_mask,
-                            all_waypoints, labels, output_path, wall_penalty):
+                            corridor, door_zone, wall_costs, forbidden,
+                            all_waypoints, labels, output_path):
     """Render all routes overlaid on a single debug scene."""
     import matplotlib.patches as mpatches
     import matplotlib.pyplot as plt
@@ -595,7 +600,7 @@ def _render_combined_scene(occupancy, meta, model, storey, site_xform,
     free = ~occupancy
     r, g, b, _ = to_rgba(COLOUR_FREE_ROOM)
     free_rgba[free.T, :3] = [r, g, b];  free_rgba[free.T, 3] = 1.0
-    corr = (corridor_mask < 1.0) & free
+    corr = corridor & free
     cr, cg, cb, _ = to_rgba(COLOUR_CORRIDOR)
     free_rgba[corr.T, :3] = [cr, cg, cb];  free_rgba[corr.T, 3] = 1.0
     ax.imshow(free_rgba, origin="lower", interpolation="nearest", extent=[0, nx, 0, ny])
@@ -603,13 +608,13 @@ def _render_combined_scene(occupancy, meta, model, storey, site_xform,
     _draw_wall_thickness_layer(ax, fig, model, storey, site_xform, meta, nx, ny)
     _draw_nonwall_obstacle_layers(ax, model, meta, storey, site_xform, nx, ny)
 
-    if forbidden_mask is not None and forbidden_mask.any():
+    if forbidden is not None and forbidden.any():
         forb_rgba = np.zeros((ny, nx, 4), dtype=np.float32)
         fr, fg, fb, _ = to_rgba(COLOUR_FORBIDDEN)
-        forb_rgba[forbidden_mask.T, :] = [fr, fg, fb, 0.35]
+        forb_rgba[forbidden.T, :] = [fr, fg, fb, 0.35]
         ax.imshow(forb_rgba, origin="lower", interpolation="nearest", extent=[0, nx, 0, ny])
 
-    reduced = occupancy & (door_wall_cost < wall_penalty * 0.5)
+    reduced = occupancy & door_zone
     if reduced.any():
         dr_rgba = np.zeros((ny, nx, 4), dtype=np.float32)
         dr, dg, db, _ = to_rgba(COLOUR_DOOR_ZONE)
