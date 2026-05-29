@@ -146,9 +146,13 @@ class PostgresMeta:
         from psycopg.rows import dict_row
         from psycopg_pool import ConnectionPool
 
+        # `check` validates (and transparently reconnects) each connection before
+        # it's lent out — Neon autosuspends and kills idle connections, which
+        # otherwise surface as `AdminShutdown` on the first request after idle.
         self.pool = ConnectionPool(
             conninfo=dsn, min_size=0, max_size=4, open=True,
             kwargs={"row_factory": dict_row},
+            check=ConnectionPool.check_connection,
         )
 
     def init(self) -> None:
