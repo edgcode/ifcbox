@@ -65,6 +65,13 @@ export interface WallAttrs {
 
 export type Walls = Record<string, WallAttrs>
 
+export interface Apartment {
+  flur_id: string
+  flur_name: string
+  room_ids: string[]
+  room_names: string[]
+}
+
 export interface RoomClass {
   key: string
   label: string

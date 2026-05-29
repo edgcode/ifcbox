@@ -58,6 +58,12 @@ interface RouteBuilderState {
   assignSource: (a: AnchorSel) => void
   appendTarget: (a: AnchorSel) => void
   removeAnchor: (a: AnchorSel) => void
+  loadApartments: (apts: {
+    flur_id: string
+    flur_name: string
+    room_ids: string[]
+    room_names: string[]
+  }[]) => void
   reset: () => void
 }
 
@@ -132,6 +138,29 @@ export const useRouteBuilder = create<RouteBuilderState>((set) => {
           targets: g.targets.filter((t) => !sameAnchor(t, a)),
         })),
       })),
+
+    loadApartments: (apts) =>
+      set(() => {
+        if (apts.length === 0) {
+          const g = newGroup()
+          return { groups: [g], activeId: g.id, pickMode: 'source', editing: false }
+        }
+        seq = 0
+        const groups: RouteGroup[] = apts.map((a) => {
+          const g = newGroup()
+          return {
+            ...g,
+            source: { kind: 'room', id: a.flur_id, label: a.flur_name },
+            targets: a.room_ids.map((id, i) => ({
+              kind: 'room' as PickKind,
+              id,
+              label: a.room_names[i] ?? id,
+            })),
+            mode: 'trunk',
+          }
+        })
+        return { groups, activeId: groups[0].id, pickMode: 'source', editing: false }
+      }),
 
     reset: () =>
       set(() => {

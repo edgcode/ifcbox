@@ -35,6 +35,10 @@ def floor_rooms(model_id: str, n: int) -> str:
     return f"models/{model_id}/floors/{n}/rooms.png"
 
 
+def floor_apartments(model_id: str, n: int) -> str:
+    return f"models/{model_id}/floors/{n}/apartments.json"
+
+
 def route_dir(route_id: str) -> str:
     return f"routes/{route_id}"
 

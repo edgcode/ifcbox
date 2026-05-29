@@ -8,9 +8,11 @@ read it from there (no cross-thread asyncio bridging needed).
 
 from __future__ import annotations
 
+import json
 import logging
 from concurrent.futures import ThreadPoolExecutor
 
+from ifcbox.apartments import discover_apartments
 from ifcbox.engine import prepare_floor
 from ifcbox.geometry import export_floor_shell
 from ifcbox.pipeline.loader import extract_floor_geometry, list_storeys, load_model
@@ -56,6 +58,13 @@ def _prepare_worker(model_id: str, floor: int, resolution: float) -> None:
         export_rooms_png(model, prep.meta, prep.pipe_z, prep.site_transform,
                          blobs.write_path(keys.floor_rooms(model_id, floor)))
         blobs.commit(keys.floor_rooms(model_id, floor))
+
+        meta.set_floor_status(model_id, floor, "preparing", stage="apartments",
+                              pct=95, resolution=resolution)
+        apartments = discover_apartments(model, storey, prep.site_transform)
+        blobs.write_text(keys.floor_apartments(model_id, floor),
+                         json.dumps(apartments))
+        blobs.commit(keys.floor_apartments(model_id, floor))
 
         meta.set_floor_status(model_id, floor, "ready", stage="done", pct=100,
                               resolution=resolution)

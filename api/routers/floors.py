@@ -125,6 +125,16 @@ async def floor_walls(model_id: str, n: int):
     return FileResponse(path, media_type="application/json")
 
 
+@router.get("/models/{model_id}/floors/{n}/apartments")
+async def floor_apartments(model_id: str, n: int):
+    _require_floor(model_id, n)
+    path = blobs.read_path(keys.floor_apartments(model_id, n))
+    if _floor_status(model_id, n) != "ready" or path is None:
+        raise HTTPException(409, {"detail": "floor not prepared",
+                                  "prepare_url": f"/api/v1/models/{model_id}/floors/{n}/prepare"})
+    return FileResponse(path, media_type="application/json")
+
+
 @router.websocket("/models/{model_id}/floors/{n}/prepare/ws")
 async def prepare_ws(websocket: WebSocket, model_id: str, n: int):
     await websocket.accept()

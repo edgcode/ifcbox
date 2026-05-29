@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/api/client'
 import { useRouteBuilder, toAnchorIn } from '@/state/routeBuilder'
 import type { AnchorSel } from '@/state/routeBuilder'
@@ -52,6 +52,7 @@ export function RouteBuilderPanel({
   const pick = useRouteBuilder((s) => s.pick)
   const removeTarget = useRouteBuilder((s) => s.removeTarget)
   const clearSource = useRouteBuilder((s) => s.clearSource)
+  const loadApartments = useRouteBuilder((s) => s.loadApartments)
   const reset = useRouteBuilder((s) => s.reset)
 
   const byGroup = useRouteResults((s) => s.byGroup)
@@ -63,8 +64,11 @@ export function RouteBuilderPanel({
 
   const submitAll = useMutation({
     mutationFn: async () => {
+      // Read groups via getState() so a just-dispatched loadApartments() is seen
+      // before React re-renders this component.
+      const current = useRouteBuilder.getState().groups
       const out: { gid: string; res: RouteResult }[] = []
-      for (const g of groups) {
+      for (const g of current) {
         if (!g.source || g.targets.length === 0) continue
         const res = await api.submitRoute(modelId, floorIndex, {
           source: toAnchorIn(g.source),
@@ -79,6 +83,13 @@ export function RouteBuilderPanel({
       out.forEach(({ gid, res }) => setResult(gid, res))
       qc.invalidateQueries({ queryKey: ['routes', modelId] })
     },
+  })
+
+  const apartmentsQ = useQuery({
+    queryKey: ['apartments', modelId, floorIndex],
+    queryFn: () => api.getApartments(modelId, floorIndex),
+    enabled: floor.status === 'ready',
+    staleTime: Infinity,
   })
 
   const completeCount = groups.filter((g) => g.source && g.targets.length > 0).length
@@ -264,6 +275,21 @@ export function RouteBuilderPanel({
       >
         {submitAll.isPending ? 'Routing…' : `Route all (${completeCount})`}
       </button>
+
+      {apartmentsQ.data && apartmentsQ.data.length > 0 && (
+        <button
+          onClick={() => {
+            clearResults()
+            loadApartments(apartmentsQ.data!)
+            submitAll.mutate()
+          }}
+          disabled={submitAll.isPending}
+          className="rounded-md border border-purple-400 bg-purple-600/10 px-2 py-1.5 text-sm font-medium text-purple-700 hover:bg-purple-600/20 disabled:opacity-40 dark:border-purple-500 dark:text-purple-300"
+          title="Auto-discover apartments (Flur → reachable rooms, stopped at fire-rated walls) and route one shared trunk per apartment."
+        >
+          Route apartments ({apartmentsQ.data.length})
+        </button>
+      )}
       {submitAll.error && (
         <p className="text-xs text-red-600 dark:text-red-400">
           {submitAll.error instanceof ApiError && submitAll.error.status === 409

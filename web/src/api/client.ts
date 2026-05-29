@@ -1,6 +1,7 @@
 // Typed API client. Attaches the shared-secret token (X-App-Token) when set.
 
 import type {
+  Apartment,
   FloorDetail,
   ModelOut,
   ModelSummary,
@@ -74,6 +75,7 @@ export const api = {
   overlayUrl: (id: string, n: number, kind: 'occupancy' | 'clearance' | 'rooms') =>
     withToken(`/api/v1/models/${id}/floors/${n}/overlays/${kind}`),
   getWalls: (id: string, n: number) => req<Walls>(`/models/${id}/floors/${n}/walls`),
+  getApartments: (id: string, n: number) => req<Apartment[]>(`/models/${id}/floors/${n}/apartments`),
   getRoomClasses: () => req<RoomClass[]>('/room-classes'),
 
   submitRoute: (id: string, n: number, body: RouteRequest) =>
