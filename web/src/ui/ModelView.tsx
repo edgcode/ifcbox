@@ -4,6 +4,18 @@ import { useSelection } from '@/state/selection'
 import { usePrepProgress } from '@/hooks/usePrepProgress'
 import type { FloorStatus, Storey } from '@/api/types'
 
+function OpenFloorButton({ index }: { index: number }) {
+  const openFloor = useSelection((s) => s.openFloor)
+  return (
+    <button
+      onClick={() => openFloor(index)}
+      className="rounded-md bg-neutral-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-neutral-700"
+    >
+      Open 3D →
+    </button>
+  )
+}
+
 export function ModelView({ modelId }: { modelId: string }) {
   const closeModel = useSelection((s) => s.closeModel)
   const model = useQuery({ queryKey: ['model', modelId], queryFn: () => api.getModel(modelId) })
@@ -88,9 +100,12 @@ function FloorRow({ modelId, storey }: { modelId: string; storey: Storey }) {
             </button>
           )}
           {status === 'ready' && floor.data && (
-            <span className="text-xs text-neutral-500">
-              {floor.data.terminals.length} terminals · {floor.data.spaces.length} spaces
-            </span>
+            <>
+              <span className="text-xs text-neutral-500">
+                {floor.data.terminals.length} terminals · {floor.data.spaces.length} spaces
+              </span>
+              <OpenFloorButton index={storey.index} />
+            </>
           )}
         </div>
       </div>
