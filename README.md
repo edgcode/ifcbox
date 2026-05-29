@@ -4,12 +4,19 @@ IFCBox takes an **IFC building model**, lets an MEP engineer pick two (or many) 
 
 It's a spatial-intelligence engine (Python) behind a FastAPI backend and a React + three.js front end, deployable as a single Docker image on Render with Cloudflare R2 + Postgres. The engine is **discipline-agnostic** — it routes a generic piping system; pressurised distribution (no gravity constraints) is the first focus.
 
-![Floor model](docs/images/scene-no-route.png)
+![Floor model - Apartment Pipe Routes](docs/images/hero.png)
 
-> A prepared floor of the test model: walls colour-coded by IFC type, **green** circulation (Flur), **red** forbidden stairwells (Treppenraum), **yellow** door-crossing zones, and room labels — the spatial picture the router works from.
+![Floor model - Room Types](docs/images/roomtypes.png)
 
-- **Live demo:** _deploying to Render — URL TBA_ (gated by a shared app token)
+![Floor model - Wall Fire Rating](docs/images/firerating.png)
+
+![Floor model - SDF](docs/images/sdf3d.png)
+
+> A prepared floor of the test model: walls colour-coded by fire rating, **green** circulation (Flur), **red** forbidden stairwells (Treppenraum), and room labels, and the signed distance field (SDF) the spatial picture the router works from.
+
 - **Try it / run it locally:** [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- **Live demo:** _deploying to Render — URL TBA_ (gated by a shared app token) - (not available yet as my free tier hosting has limited ram for model processing)
+
 - **Deep docs:** [plans index](plans/README.md) · [architecture](docs/architecture.md)
 
 ---

@@ -4,45 +4,12 @@ Three ways to use IFCBox: the **hosted web app**, **running the web app locally*
 
 ---
 
-## 1 · Try the hosted app (fastest)
-
-1. Open the deployment URL (ask the owner) and **sign in** with the shared **app token**.
-2. **Upload** an IFC model (`.ifc`). It's parsed and listed with its storey count.
-3. Click the model → a **Storeys** list. Click **Prepare** on a floor (a residential floor with rooms works best). A progress bar streams `extract → voxelize → shell` over a WebSocket; after ~15-30 s it goes **Ready** with terminal/space counts.
-4. Click **Open 3D →**.
-
-Then follow the **3D workflow** below.
-
-> First load after the app has been idle is slow — the free Render instance and the Neon database resume on demand.
-
----
-
-## 2 · The 3D workflow
-
-Once a floor is open in the 3D viewer:
-
-- **Navigate:** left-drag orbit · right-drag pan · scroll zoom.
-- **Pick endpoints:** the right panel has a **3D picking** toggle (off by default, so you can navigate without selecting). Turn it **ON**, then:
-  - choose **Source** or **Target**, and click a **terminal** (amber sphere), a **room** (cyan sphere, labelled) or any **wall** (drops a free point, shown as a diamond);
-  - or pick from the searchable **terminal/room list** in the panel.
-- **Right-click any marker** for a context menu (set as source / add as target / remove) — handy when the list is ambiguous.
-- **Mode:** **Trunk** (one shared main that branches to all targets) or **Independent** (a separate pipe per target).
-- **Systems:** add more **systems** (e.g. one plant room → its zone) with **+ Add**; each routes independently in its own colour.
-- **Route all** → pipes render in 3D (junctions sized to the pipe), with length + segment readout and a **Download pipe.glb**.
-- **Left panel:**
-  - **Wall colour:** Default / Wall thickness / Wall type / Fire rating (read from the IFC), with a legend.
-  - **Overlay:** Occupancy / SDF (clearance) / Room types, drawn on a plane at the routing elevation, with a legend.
-  - **Clip top:** slice away geometry above a height to look down onto the plan.
-  - **Show:** toggle terminals / rooms / room labels.
-- **Theme:** Light / Dark toggle in the header.
-
----
-
-## 3 · Run the web app locally
+## 1 · Run the web app locally (recommended)
 
 Prereqs: **Python 3.12**, **Node 20**, and an **IFC file** (IFC2X3 or IFC4 with `IfcSpace`s and walls). Auth is **off** locally (leave the token blank).
 
 **Backend** (terminal 1):
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
@@ -50,13 +17,53 @@ python -m uvicorn api.main:app --port 8000        # IFCBOX_STORAGE defaults to l
 ```
 
 **Frontend** (terminal 2):
+
 ```bash
 cd web
 npm install
 npm run dev                                        # http://localhost:5173 (proxies /api to :8000)
 ```
 
-Open `http://localhost:5173`, click **Continue** (blank token), then upload → prepare → open 3D and follow the workflow above.
+Open `http://localhost:5173`, click **Continue** (blank token), then upload → prepare → open 3D and follow the workflow below.
+
+---
+
+## 2 · The 3D workflow
+
+Once a floor is open in the 3D viewer:
+
+* **Navigate:** left-drag orbit · right-drag pan · scroll zoom.
+* **Pick endpoints:** the right panel has a **3D picking** toggle (off by default, so you can navigate without selecting). Turn it **ON**, then:
+
+  * choose **Source** or **Target**, and click a **terminal** (amber sphere), a **room** (cyan sphere, labelled) or any **wall** (drops a free point, shown as a diamond);
+  * or pick from the searchable **terminal/room list** in the panel.
+* **Right-click any marker** for a context menu (set as source / add as target / remove) — handy when the list is ambiguous.
+* **Mode:** **Trunk** (one shared main that branches to all targets) or **Independent** (a separate pipe per target).
+* **Systems:** add more **systems** (e.g. one plant room → its zone) with **+ Add**; each routes independently in its own colour.
+* **Route all** → pipes render in 3D (junctions sized to the pipe), with length + segment readout and a **Download pipe.glb**.
+* **Left panel:**
+
+  * **Wall colour:** Default / Wall thickness / Wall type / Fire rating (read from the IFC), with a legend.
+  * **Overlay:** Occupancy / SDF (clearance) / Room types, drawn on a plane at the routing elevation, with a legend.
+  * **Clip top:** slice away geometry above a height to look down onto the plan.
+  * **Show:** toggle terminals / rooms / room labels.
+* **Theme:** Light / Dark toggle in the header.
+
+---
+
+## 3 · Try the hosted app (limited on free tier)
+
+> The hosted deployment may fail or become unresponsive on larger models because the free-tier instance does not have enough RAM for some processing workloads.
+
+1. Open the deployment URL [](https://ifcbox.onrender.com/) and **sign in** with the shared **app token**.
+2. **Upload** an IFC model (`.ifc`). It's parsed and listed with its storey count.
+3. Click the model → a **Storeys** list. Click **Prepare** on a floor (a residential floor with rooms works best). A progress bar streams `extract → voxelize → shell` over a WebSocket; after ~15-30 s it goes **Ready** with terminal/space counts.
+4. Click **Open 3D →**.
+
+Then follow the **3D workflow** above.
+
+> First load after the app has been idle is slow — the free Render instance and the Neon database resume on demand.
+
 
 ---
 
