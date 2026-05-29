@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useAuth } from '@/state/auth'
@@ -13,8 +13,19 @@ export function ModelsView() {
 
   const models = useQuery({ queryKey: ['models'], queryFn: api.listModels })
 
+  const [uploadName, setUploadName] = useState<string | null>(null)
+  const [uploadPct, setUploadPct] = useState(0)
+
   const upload = useMutation({
-    mutationFn: (file: File) => api.uploadModel(file),
+    mutationFn: (file: File) => {
+      setUploadName(file.name)
+      setUploadPct(0)
+      return api.uploadModel(file, setUploadPct)
+    },
+    onSettled: () => {
+      setUploadName(null)
+      setUploadPct(0)
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['models'] }),
   })
 
@@ -62,6 +73,38 @@ export function ModelsView() {
             </button>
           </div>
         </div>
+
+        {upload.isPending && (
+          <div className="rounded-md border border-blue-300 bg-blue-50/80 p-4 dark:border-blue-700/50 dark:bg-blue-950/30">
+            <div className="flex items-center gap-3">
+              <svg className="h-6 w-6 shrink-0 animate-spin text-blue-600 dark:text-blue-400"
+                   viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+              </svg>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-blue-900 dark:text-blue-100">
+                  {uploadPct < 1 ? 'Uploading' : 'Parsing on server'} — {uploadName}
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300">
+                  {uploadPct < 1
+                    ? `${Math.round(uploadPct * 100)}% transferred — keep this tab open.`
+                    : 'IFC parse can take up to a minute on the free tier — don’t refresh.'}
+                </p>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-blue-200 dark:bg-blue-900">
+                  {uploadPct < 1 ? (
+                    <div
+                      className="h-full bg-blue-600 transition-all dark:bg-blue-500"
+                      style={{ width: `${Math.max(uploadPct * 100, 2)}%` }}
+                    />
+                  ) : (
+                    <div className="h-full w-2/5 animate-pulse rounded-full bg-blue-600 dark:bg-blue-500" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {models.isLoading && <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading…</p>}
         {models.error && (

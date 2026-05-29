@@ -89,7 +89,9 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
           <ambientLight intensity={0.7} />
           <directionalLight position={[40, -30, 60]} intensity={1.3} />
           <directionalLight position={[-30, 20, 30]} intensity={0.5} />
-          <Clipping enabled={clip} height={clipHeight} />
+          {/* Only clip once clipHeight is initialised from the floor grid;
+              otherwise default clip=true would hide everything above z=0. */}
+          <Clipping enabled={clip && clipHeight > 0} height={clipHeight} />
 
           {overlay !== 'none' && grid && (
             <Suspense fallback={null}>

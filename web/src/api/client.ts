@@ -59,11 +59,28 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   listModels: () => req<ModelSummary[]>('/models'),
   getModel: (id: string) => req<ModelOut>(`/models/${id}`),
-  uploadModel: (file: File) => {
-    const fd = new FormData()
-    fd.append('file', file)
-    return req<ModelOut>('/models', { method: 'POST', body: fd })
-  },
+  uploadModel: (file: File, onProgress?: (pct: number) => void) =>
+    new Promise<ModelOut>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      const fd = new FormData()
+      fd.append('file', file)
+      xhr.open('POST', '/api/v1/models')
+      const token = getToken()
+      if (token) xhr.setRequestHeader('X-App-Token', token)
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total)
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try { resolve(JSON.parse(xhr.responseText)) }
+          catch { reject(new ApiError(xhr.status, 'invalid JSON response')) }
+        } else {
+          reject(new ApiError(xhr.status, xhr.responseText || xhr.statusText))
+        }
+      }
+      xhr.onerror = () => reject(new ApiError(0, 'network error'))
+      xhr.send(fd)
+    }),
   deleteModel: (id: string) => req<void>(`/models/${id}`, { method: 'DELETE' }),
 
   floorDetail: (id: string, n: number) =>

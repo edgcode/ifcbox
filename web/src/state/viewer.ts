@@ -20,7 +20,7 @@ interface ViewerState {
 
 export const useViewer = create<ViewerState>((set) => ({
   overlay: 'none',
-  clip: false,
+  clip: true,
   clipHeight: 0,
   colorMode: 'default',
   showTerminals: false,
