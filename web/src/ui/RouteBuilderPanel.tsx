@@ -12,13 +12,15 @@ function Seg<T extends string>(props: {
   onChange: (v: T) => void
 }) {
   return (
-    <div className="flex overflow-hidden rounded-md border border-neutral-700 text-xs">
+    <div className="flex overflow-hidden rounded-md border border-neutral-300 text-xs dark:border-neutral-700">
       {props.options.map((o) => (
         <button
           key={o.v}
           onClick={() => props.onChange(o.v)}
           className={`flex-1 px-2 py-1 ${
-            props.value === o.v ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-300'
+            props.value === o.v
+              ? 'bg-blue-600 text-white'
+              : 'text-neutral-600 dark:text-neutral-300'
           }`}
         >
           {o.label}
@@ -91,9 +93,11 @@ export function RouteBuilderPanel({
   }, [floor, q])
 
   const activeResult = byGroup[active.id]
+  const label = 'text-xs font-medium text-neutral-500 dark:text-neutral-400'
+  const chipX = 'text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white'
 
   return (
-    <div className="absolute top-3 right-3 bottom-3 flex w-72 flex-col gap-3 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900/90 p-3 text-neutral-100 backdrop-blur">
+    <div className="absolute top-3 right-3 bottom-3 flex w-72 flex-col gap-3 overflow-y-auto rounded-lg border border-neutral-300 bg-white/90 p-3 text-neutral-900 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90 dark:text-neutral-100">
       {/* 3D picking toggle — gates scene clicks to avoid accidental selection */}
       <div className="space-y-1">
         <button
@@ -101,7 +105,7 @@ export function RouteBuilderPanel({
           className={`w-full rounded-md px-2 py-1.5 text-sm font-medium ${
             editing
               ? 'bg-green-600 text-white hover:bg-green-500'
-              : 'border border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+              : 'border border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
           }`}
         >
           {editing ? '● 3D picking: ON' : '○ 3D picking: OFF'}
@@ -116,8 +120,8 @@ export function RouteBuilderPanel({
       {/* Systems */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-neutral-400">Systems ({groups.length})</p>
-          <button onClick={addGroup} className="text-xs text-blue-400 hover:underline">
+          <p className={label}>Systems ({groups.length})</p>
+          <button onClick={addGroup} className="text-xs text-blue-600 hover:underline dark:text-blue-400">
             + Add
           </button>
         </div>
@@ -129,24 +133,20 @@ export function RouteBuilderPanel({
               <div
                 key={g.id}
                 className={`flex items-center gap-2 rounded border px-2 py-1 ${
-                  isActive ? 'border-neutral-400 bg-neutral-800' : 'border-neutral-800'
+                  isActive
+                    ? 'border-neutral-400 bg-neutral-100 dark:border-neutral-500 dark:bg-neutral-800'
+                    : 'border-neutral-200 dark:border-neutral-800'
                 }`}
               >
-                <span
-                  className="h-3 w-3 shrink-0 rounded-full"
-                  style={{ backgroundColor: g.color }}
-                />
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: g.color }} />
                 <button onClick={() => setActive(g.id)} className="min-w-0 flex-1 text-left">
                   <p className="truncate text-xs font-medium">System {i + 1}</p>
-                  <p className="truncate text-[11px] text-neutral-400">
+                  <p className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">
                     {g.source ? g.source.label : 'no source'} → {g.targets.length}
                     {res && ` · ${res.total_length_m.toFixed(1)} m`}
                   </p>
                 </button>
-                <button
-                  onClick={() => removeGroup(g.id)}
-                  className="text-neutral-500 hover:text-red-400"
-                >
+                <button onClick={() => removeGroup(g.id)} className="text-neutral-500 hover:text-red-500 dark:hover:text-red-400">
                   ✕
                 </button>
               </div>
@@ -155,10 +155,10 @@ export function RouteBuilderPanel({
         </div>
       </div>
 
-      <hr className="border-neutral-800" />
+      <hr className="border-neutral-200 dark:border-neutral-800" />
 
       {/* Active system editor */}
-      <p className="text-xs font-medium text-neutral-300">
+      <p className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
         Editing System {groups.findIndex((g) => g.id === active.id) + 1}
       </p>
 
@@ -180,13 +180,13 @@ export function RouteBuilderPanel({
       />
 
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Source</p>
+        <p className={label}>Source</p>
         {active.source ? (
           <div className="flex items-center justify-between rounded bg-green-600/20 px-2 py-1 text-xs">
             <span className="truncate">
               {active.source.kind}: {active.source.label}
             </span>
-            <button onClick={() => clearSource(active.id)} className="text-neutral-400 hover:text-white">
+            <button onClick={() => clearSource(active.id)} className={chipX}>
               ✕
             </button>
           </div>
@@ -196,7 +196,7 @@ export function RouteBuilderPanel({
       </div>
 
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Targets ({active.targets.length})</p>
+        <p className={label}>Targets ({active.targets.length})</p>
         <div className="max-h-20 space-y-1 overflow-auto">
           {active.targets.map((t, i) => (
             <div
@@ -206,10 +206,7 @@ export function RouteBuilderPanel({
               <span className="truncate">
                 {t.kind}: {t.label}
               </span>
-              <button
-                onClick={() => removeTarget(active.id, i)}
-                className="text-neutral-400 hover:text-white"
-              >
+              <button onClick={() => removeTarget(active.id, i)} className={chipX}>
                 ✕
               </button>
             </div>
@@ -223,16 +220,16 @@ export function RouteBuilderPanel({
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search terminals / rooms"
-          className="rounded border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs outline-none"
+          className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs outline-none dark:border-neutral-700 dark:bg-neutral-800"
         />
-        <ul className="min-h-0 flex-1 divide-y divide-neutral-800 overflow-auto rounded border border-neutral-800">
+        <ul className="min-h-0 flex-1 divide-y divide-neutral-200 overflow-auto rounded border border-neutral-200 dark:divide-neutral-800 dark:border-neutral-800">
           {items.map((it) => (
             <li key={`${it.kind}-${it.id}`}>
               <button
                 onClick={() => pick(it)}
-                className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs hover:bg-neutral-800"
+                className="flex w-full items-center gap-2 px-2 py-1 text-left text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
               >
-                <span className={it.kind === 'terminal' ? 'text-amber-400' : 'text-cyan-400'}>
+                <span className={it.kind === 'terminal' ? 'text-amber-500 dark:text-amber-400' : 'text-cyan-600 dark:text-cyan-400'}>
                   {it.kind === 'terminal' ? '◈' : '▢'}
                 </span>
                 <span className="truncate">{it.label}</span>
@@ -243,17 +240,17 @@ export function RouteBuilderPanel({
       </div>
 
       {activeResult && (
-        <div className="space-y-0.5 rounded border border-neutral-700 bg-neutral-800/60 p-2 text-xs">
-          <p className="text-neutral-300">
+        <div className="space-y-0.5 rounded border border-neutral-300 bg-neutral-100/60 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-800/60">
+          <p className="text-neutral-700 dark:text-neutral-300">
             {activeResult.total_length_m.toFixed(2)} m · {activeResult.segments.length} segment(s)
           </p>
           {activeResult.unreachable_targets.length > 0 && (
-            <p className="text-amber-400">{activeResult.unreachable_targets.length} unreachable</p>
+            <p className="text-amber-600 dark:text-amber-400">{activeResult.unreachable_targets.length} unreachable</p>
           )}
           <a
             href={api.meshUrl(activeResult.route_id)}
             download
-            className="inline-block text-blue-400 hover:underline"
+            className="inline-block text-blue-600 hover:underline dark:text-blue-400"
           >
             Download pipe.glb
           </a>
@@ -268,7 +265,7 @@ export function RouteBuilderPanel({
         {submitAll.isPending ? 'Routing…' : `Route all (${completeCount})`}
       </button>
       {submitAll.error && (
-        <p className="text-xs text-red-400">
+        <p className="text-xs text-red-600 dark:text-red-400">
           {submitAll.error instanceof ApiError && submitAll.error.status === 409
             ? 'Floor not prepared.'
             : `Route failed: ${(submitAll.error as Error).message}`}
@@ -280,7 +277,7 @@ export function RouteBuilderPanel({
           reset()
           clearResults()
         }}
-        className="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
+        className="rounded-md border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
       >
         Reset all
       </button>

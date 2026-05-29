@@ -1,7 +1,14 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: light dark;
+/* class-based dark mode (toggled via .dark on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Bind native controls (scrollbars, range sliders, selects) to the app theme */
+html {
+  color-scheme: light;
+}
+html.dark {
+  color-scheme: dark;
 }
 
 html, body, #root {

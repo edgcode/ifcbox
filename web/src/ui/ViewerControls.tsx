@@ -45,13 +45,13 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
   const max = pz + 2
 
   return (
-    <div className="absolute top-3 left-3 w-56 space-y-2 rounded-lg border border-neutral-700 bg-neutral-900/90 p-3 text-neutral-100 backdrop-blur">
+    <div className="absolute top-3 left-3 w-56 space-y-2 rounded-lg border border-neutral-300 bg-white/90 p-3 text-neutral-900 backdrop-blur dark:border-neutral-700 dark:bg-neutral-900/90 dark:text-neutral-100">
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Wall colour</p>
+        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Wall colour</p>
         <select
           value={colorMode}
           onChange={(e) => setColorMode(e.target.value as ColorMode)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs"
+          className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-800"
         >
           {COLOR_MODES.map((m) => (
             <option key={m.v} value={m.v}>
@@ -62,11 +62,11 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
       </div>
 
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Overlay</p>
+        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Overlay</p>
         <select
           value={overlay}
           onChange={(e) => setOverlay(e.target.value as OverlayKind)}
-          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs"
+          className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-800"
         >
           {OVERLAYS.map((o) => (
             <option key={o.v} value={o.v}>
@@ -79,7 +79,7 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
             {roomClasses.data.map((rc) => (
               <li key={rc.key} className="flex items-center gap-2 text-[11px]">
                 <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: rc.color }} />
-                <span className="truncate text-neutral-300">{rc.label}</span>
+                <span className="truncate text-neutral-600 dark:text-neutral-300">{rc.label}</span>
               </li>
             ))}
           </ul>
@@ -87,7 +87,7 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
       </div>
 
       <div className="space-y-1">
-        <label className="flex items-center gap-2 text-xs text-neutral-300">
+        <label className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
           <input type="checkbox" checked={clip} onChange={(e) => setClip(e.target.checked)} />
           Clip top
         </label>
@@ -99,22 +99,22 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
             step={0.1}
             value={clipHeight}
             onChange={(e) => setClipHeight(Number(e.target.value))}
-            className="w-full"
+            className="w-full accent-blue-600"
           />
         )}
       </div>
 
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Show</p>
-        <label className="flex items-center gap-2 text-xs text-neutral-300">
+        <p className="text-xs font-medium text-neutral-500 dark:text-neutral-400">Show</p>
+        <label className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
           <input type="checkbox" checked={showTerminals} onChange={() => toggle('showTerminals')} />
           Terminals
         </label>
-        <label className="flex items-center gap-2 text-xs text-neutral-300">
+        <label className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
           <input type="checkbox" checked={showRooms} onChange={() => toggle('showRooms')} />
           Rooms
         </label>
-        <label className="flex items-center gap-2 text-xs text-neutral-300">
+        <label className="flex items-center gap-2 text-xs text-neutral-600 dark:text-neutral-300">
           <input type="checkbox" checked={showLabels} onChange={() => toggle('showLabels')} />
           Room labels
         </label>

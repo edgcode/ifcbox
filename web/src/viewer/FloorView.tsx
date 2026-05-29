@@ -12,6 +12,7 @@ import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
 import { ViewerControls } from '@/ui/ViewerControls'
 import { Legend } from '@/ui/Legend'
 import { ContextMenu } from '@/ui/ContextMenu'
+import { ThemeToggle } from '@/ui/ThemeToggle'
 import { BimShell } from './BimShell'
 import { Clipping } from './Clipping'
 import { Markers } from './Markers'
@@ -59,19 +60,25 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
   }, [grid, setClipHeight])
 
   return (
-    <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
-      <header className="flex items-center gap-3 border-b border-neutral-800 px-6 py-3">
-        <button onClick={closeFloor} className="text-sm text-neutral-400 hover:text-white">
-          ← Storeys
-        </button>
-        <h1 className="text-base font-semibold">{floor.data?.name ?? `Floor ${floorIndex}`}</h1>
-        {floor.data && (
-          <span className="text-xs text-neutral-400">
-            {floor.data.terminals.length} terminals · {floor.data.spaces.length} spaces
-          </span>
-        )}
-        {floor.isLoading && <span className="text-xs text-neutral-500">loading…</span>}
-        {floor.error && <span className="text-xs text-red-400">failed to load floor</span>}
+    <div className="flex h-full flex-col bg-neutral-100 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
+      <header className="flex items-center justify-between border-b border-neutral-200 px-6 py-3 dark:border-neutral-800">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={closeFloor}
+            className="text-sm text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+          >
+            ← Storeys
+          </button>
+          <h1 className="text-base font-semibold">{floor.data?.name ?? `Floor ${floorIndex}`}</h1>
+          {floor.data && (
+            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              {floor.data.terminals.length} terminals · {floor.data.spaces.length} spaces
+            </span>
+          )}
+          {floor.isLoading && <span className="text-xs text-neutral-500 dark:text-neutral-400">loading…</span>}
+          {floor.error && <span className="text-xs text-red-500 dark:text-red-400">failed to load floor</span>}
+        </div>
+        <ThemeToggle />
       </header>
 
       <div className="relative flex-1">
