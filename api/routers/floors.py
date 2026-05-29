@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Response, WebSocket, WebSocketDisc
 from fastapi.responses import FileResponse
 
 from ifcbox.overlays import clearance_png, occupancy_png
+from ifcbox.rooms import ROOM_CLASSES
 from api import cache, tasks
 from api.schemas import FloorDetail, GridMeta, SpaceOut, TerminalOut
 from api.store import db, files
@@ -85,11 +86,25 @@ async def floor_geometry(model_id: str, n: int):
     return FileResponse(shell, media_type="model/gltf-binary", filename="shell.glb")
 
 
+@router.get("/room-classes")
+async def room_classes():
+    return [{"key": k, "label": label, "color": color} for k, label, color in ROOM_CLASSES]
+
+
 @router.get("/models/{model_id}/floors/{n}/overlays/{kind}")
 async def floor_overlay(model_id: str, n: int, kind: str):
     _require_floor(model_id, n)
-    if kind not in ("occupancy", "clearance"):
+    if kind not in ("occupancy", "clearance", "rooms"):
         raise HTTPException(404, "unknown overlay")
+
+    # 'rooms' is rasterised at prepare time (needs space geometry) and served as a file.
+    if kind == "rooms":
+        path = files.floor_rooms(model_id, n)
+        if _floor_status(model_id, n) != "ready" or not path.exists():
+            raise HTTPException(409, {"detail": "floor not prepared",
+                                      "prepare_url": f"/api/v1/models/{model_id}/floors/{n}/prepare"})
+        return FileResponse(path, media_type="image/png")
+
     prep = cache.get_prepared(model_id, n)
     if prep is None:
         raise HTTPException(409, {"detail": "floor not prepared",

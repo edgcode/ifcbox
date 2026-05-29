@@ -149,7 +149,10 @@ def cmd_route(args):
 
     if args.shell:
         from ifcbox.geometry import export_floor_shell
+        from ifcbox.rooms import export_rooms_png
         export_floor_shell(geom, output_dir / "shell.glb", output_dir / "walls.json")
+        export_rooms_png(model, prep.meta, prep.pipe_z, prep.site_transform,
+                         output_dir / "rooms.png")
 
     if args.debug:
         _render_debug(args, model, storey, prep, geom, result, output_dir)

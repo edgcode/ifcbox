@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from ifcbox.engine import prepare_floor
 from ifcbox.geometry import export_floor_shell
 from ifcbox.pipeline.loader import extract_floor_geometry, list_storeys, load_model
+from ifcbox.rooms import export_rooms_png
 from api import cache
 from api.store import db, files
 
@@ -47,6 +48,8 @@ def _prepare_worker(model_id: str, floor: int, resolution: float) -> None:
                             pct=85, resolution=resolution)
         export_floor_shell(geom, files.floor_shell(model_id, floor),
                            files.floor_walls(model_id, floor))
+        export_rooms_png(model, prep.meta, prep.pipe_z, prep.site_transform,
+                         files.floor_rooms(model_id, floor))
 
         db.set_floor_status(model_id, floor, "ready", stage="done", pct=100,
                             resolution=resolution)

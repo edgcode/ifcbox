@@ -36,6 +36,10 @@ def floor_walls(model_id: str, n: int) -> Path:
     return floor_dir(model_id, n) / "walls.json"
 
 
+def floor_rooms(model_id: str, n: int) -> Path:
+    return floor_dir(model_id, n) / "rooms.png"
+
+
 # ── routes ──────────────────────────────────────────────────────────────────
 def route_dir(route_id: str) -> Path:
     return DATA_DIR / "routes" / route_id
