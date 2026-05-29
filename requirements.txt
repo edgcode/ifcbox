@@ -5,3 +5,9 @@ scipy>=1.10
 pyvista>=0.42
 networkx>=3.0
 scikit-image>=0.21
+
+# Phase 2 — web backend
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+websockets>=12.0
