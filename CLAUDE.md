@@ -8,8 +8,9 @@ Before starting any non-trivial work, read:
 
 - **`plans/README.md`** — the central index. Start here; it maps all the plan docs and points to the current focus.
 - **`plans/spec-pipeline.md`** — Phase 1 spec: the IFC parsing + routing pipeline (the spatial core).
-- **`plans/spec-api.md`** — Phase 2 spec: engine refactor + FastAPI backend (current focus).
-- **`plans/spec-frontend.md`** — frontend outline (the API is designed to serve it).
+- **`plans/spec-api.md`** — Phase 2 spec: engine refactor + FastAPI backend (built + tested).
+- **`plans/spec-frontend.md`** — Phase 3 frontend plan (React + r3f viewer, route authoring, overlays).
+- **`plans/spec-deploy.md`** — Phase 3 deploy/infra: Dockerised Render + R2 + Postgres, pluggable storage, auth (current focus).
 - **`plans/progress.md`** — what has been built, key technical decisions with rationale, and next steps. Read this to understand current state before proposing changes.
 
 The specs are the source of truth for *what we are building* and *what we are explicitly NOT building yet* (each has a "what we are NOT building" table). Do not let deferred features creep into the current phase. If a request conflicts with a locked decision in a spec, flag the conflict rather than silently overriding it.

@@ -1,765 +1,171 @@
-# BIM Pipe Routing Platform — Frontend Specification
+# IFCBox — Phase 3 Spec: Frontend
 
-# 1. Frontend Objectives
+Generated from grilling session 2026-05-29. Decisions recorded with rationale. This supersedes the earlier outline-only version.
 
-The frontend is responsible for:
-
-* High-performance BIM visualisation
-* Interactive route authoring
-* Spatial debugging
-* Overlay rendering
-* User workflows
-* Communication with backend routing services
-
-The frontend should NOT:
-
-* perform heavy IFC parsing
-* compute voxelisation
-* generate SDFs
-* run large routing algorithms
-
-Those responsibilities belong to backend services.
+> **Scope:** the browser UI that drives the Phase 2b API ([spec-api.md](spec-api.md)). Deployment, storage, and auth are specified in [spec-deploy.md](spec-deploy.md); the engine in [spec-pipeline.md](spec-pipeline.md). Start at the [plans index](README.md).
+>
+> The frontend is a **high-performance BIM interaction layer** — it renders server-generated glTF, authors routes, and visualises spatial debug data. It does **not** parse IFC, voxelise, or compute SDFs/routes (all server-side).
 
 ---
 
-# 2. Recommended Frontend Stack
+## 1. Confirmed Decisions
 
-| Layer             | Recommendation      |
-| ----------------- | ------------------- |
-| Framework         | React               |
-| Language          | TypeScript          |
-| 3D Engine         | react-three-fiber   |
-| BIM Viewer        | That Open Engine    |
-| Rendering Backend | Three.js            |
-| State Management  | Zustand             |
-| Data Fetching     | TanStack Query      |
-| Styling           | TailwindCSS         |
-| UI Components     | shadcn/ui           |
-| WebSocket Client  | native ws/socket.io |
-| Build Tool        | Vite                |
+| # | Decision | Choice | Rationale |
+|---|---|---|---|
+| 1 | First-build scope | **Fuller MVP**: viewing + click-to-pick + clipping + occupancy/SDF overlays | User wants a capable first build, not just a slice |
+| 2 | Endpoint picking | **3D markers + raycast points** | Terminals/rooms as clickable markers (from floor-detail API) + free points via raycast; covers all 3 anchor types, mostly client-side |
+| 3 | Viewer stack | **Plain react-three-fiber + drei (GLTFLoader)** | Backend serves glTF → no in-browser IFC parsing; That Open Engine dropped from MVP |
+| 4 | Overlays | **Server PNG slices on a plane** | Occupancy + SDF rendered as textures on a floor-aligned plane; lightweight; instanced voxels deferred |
+| 5 | Clipping/section | **three.js native clip planes** (client-side) | Floor isolation + section box need no backend |
+| 6 | State / data | **Zustand + TanStack Query**; WS for prep progress | Per stack; lightweight viewer state + cached async |
+
+(Deployment-side decisions — single Docker image, one origin, shared-secret auth — live in [spec-deploy.md](spec-deploy.md).)
 
 ---
 
-# 3. Core Frontend Architecture
+## 2. MVP Feature Set
 
-```text
-src/
-├── app/
-├── viewer/
-├── overlays/
-├── routing/
-├── spatial/
-├── ui/
-├── state/
-├── api/
-├── hooks/
-├── utils/
-└── types/
+1. **Auth gate** — one-field token login (stored in `localStorage`, sent as `X-App-Token`).
+2. **Model management** — upload IFC (multipart, progress), list/select/delete models.
+3. **Floor list + prepare** — per-storey status; trigger prepare; live progress via WebSocket (stages + %).
+4. **3D viewer** — load per-floor `shell.glb`; orbit/pan/zoom; floor isolation; clip planes / section box.
+5. **Markers** — terminals + room centroids as clickable glyphs (from floor detail); searchable side list mirrors them.
+6. **Route builder** — pick source (1) + targets (N) as point (raycast) / terminal / room anchors; choose `trunk`/`independent`; submit; view result.
+7. **Route result** — render `pipe.glb`, bend/branch markers, length + per-segment readout; download glb; route history (re-load past routes).
+8. **Overlays** — toggle occupancy / SDF (clearance) textured plane at routing elevation.
+
+---
+
+## 3. Stack
+
+| Layer | Choice |
+|---|---|
+| Framework / lang | React + TypeScript (Vite) |
+| 3D | three.js + @react-three/fiber + @react-three/drei |
+| State | Zustand |
+| Data fetching | TanStack Query |
+| Realtime | native WebSocket |
+| UI | TailwindCSS + shadcn/ui |
+| ~~BIM viewer~~ | ~~That Open Engine~~ — dropped (server serves glTF) |
+
+---
+
+## 4. Architecture
+
+### 4.1 Scene graph (r3f)
+
+```
+<Canvas>
+  <CameraControls />
+  <BimShell url=/floors/{n}/geometry />     # useGLTF(shell.glb) — world coords, Z-up
+  <PipeNetwork url=/routes/{id}/mesh />      # pipe.glb (current route)
+  <Markers terminals spaces />                # glyphs at world centroids; click -> anchor
+  <OverlayPlane kind=occupancy|sdf />         # textured plane at pipe_z (toggle)
+  <ClipPlanes />                              # three.js clip planes (section/floor isolate)
+  <PickHandler />                             # raycast shell hit -> world xyz -> PointAnchor
+</Canvas>
 ```
 
----
+> **Coordinate note:** glb is **Z-up** (Revit/IFC convention, [spec-deploy] not flipped server-side). Set the r3f camera/up to Z-up (or apply one root rotation) consistently for shell, pipe, markers, and overlays.
 
-# 4. Application Layers
+### 4.2 Picking → anchors
 
-# 4.1 Viewer Layer
+- **Raycast** on `BimShell`: hit point (world XYZ) → `{type:"point", xyz}`. Engine forces `z=pipe_z`.
+- **Terminal/room glyph** click → `{type:"terminal"|"room", id}`.
+- Side panel lists mirror the markers (searchable); selecting a list row = selecting its marker.
+- Route builder state: one `source` anchor + ordered `targets[]`; add/remove; `mode` toggle.
 
-Responsible for:
+### 4.3 Overlays (PNG plane)
 
-* rendering BIM geometry
-* camera controls
-* clipping planes
-* object selection
-* visibility filtering
+The occupancy/SDF grid is axis-aligned in **site** space; the scene is in **world** space. So the textured plane is built in site space then placed via the site→world transform:
 
-Technologies:
+- Plane size = `(nx·res) × (ny·res)`, positioned at site `origin`, elevation `pipe_z`.
+- Apply `site→world` (Z-rotation + translation) to the plane node so it aligns with the shell.
+- Texture = the served PNG (`occupancy.png` / `clearance.png`), `NearestFilter`, toggle opacity.
 
-* react-three-fiber
-* Three.js
-* That Open Engine
+Requires the API to expose floor **grid meta**: `origin (site x,y)`, `resolution`, `shape (nx,ny)`, `pipe_z`, and the `site→world` transform — added to the floor-detail response (see §6).
 
----
+### 4.4 Clipping / floor isolation
 
-# 4.2 Routing Layer
+Pure three.js: `renderer.localClippingEnabled = true` + `Plane`s for a section box; floor isolation is implicit (we only load one floor's shell), with an optional top clip to cut overhead structure.
 
-Responsible for:
+### 4.5 State (Zustand) & data (TanStack Query)
 
-* route authoring
-* endpoint selection
-* displaying routes
-* route previews
-* editing paths
+- **Stores:** `auth` (token), `selection` (current model/floor), `routeBuilder` (source/targets/mode/params), `viewer` (overlay toggle, clip state, camera bookmarks).
+- **Queries:** models list, model detail, floor detail (status + terminals + spaces + grid meta), route history, route detail. **Mutations:** upload, prepare, submit route, delete.
+- **WS:** subscribe to `…/prepare/ws` while a floor is preparing; drive the progress bar; on `ready`, invalidate the floor query.
+- **Auth:** fetch wrapper attaches `X-App-Token`; WS attaches token as query param.
 
 ---
 
-# 4.3 Spatial Debug Layer
+## 5. Folder Structure (`web/`)
 
-Responsible for visualising:
-
-* voxel occupancy
-* SDF heatmaps
-* corridor graphs
-* graph nodes
-* pathfinding expansion
-* clash zones
-
-This layer is critical for development/debugging.
-
----
-
-# 4.4 UI Layer
-
-Responsible for:
-
-* panels
-* property inspectors
-* filters
-* route settings
-* toolbars
-* dialogs
-
----
-
-# 4.5 API Layer
-
-Responsible for:
-
-* backend communication
-* route requests
-* model loading
-* websocket updates
-* authentication
-
----
-
-# 5. Recommended Viewer Stack
-
-# Primary Recommendation
-
-## React + react-three-fiber + That Open Engine
-
-Reason:
-
-* BIM-native tooling
-* excellent extensibility
-* modern React integration
-* strong IFC support
-* supports custom overlays cleanly
-
----
-
-# 6. Viewer Responsibilities
-
-The viewer must support:
-
-## Core BIM Features
-
-* IFC model rendering
-* large-model streaming
-* visibility filters
-* floor isolation
-* clipping planes
-* section boxes
-* metadata inspection
-* object picking
-
----
-
-## Spatial Debugging Features
-
-* occupancy voxel rendering
-* SDF slice rendering
-* corridor graph rendering
-* graph node rendering
-* route cost visualisation
-* search frontier visualisation
-
----
-
-## Routing Features
-
-* endpoint picking
-* route preview
-* route editing
-* route locking
-* rerouting
-* clash display
-
----
-
-# 7. Scene Graph Architecture
-
-Recommended scene organisation:
-
-```text
-Scene
-├── BIMGeometryLayer
-├── RoutingLayer
-├── SpatialDebugLayer
-├── InteractionLayer
-├── TemporaryPreviewLayer
-└── UILabelLayer
+```
+web/
+├── src/
+│   ├── app/            # routes, layout, providers (Query, theme)
+│   ├── api/            # typed client, query/mutation hooks, ws client
+│   ├── viewer/         # Canvas, BimShell, PipeNetwork, Markers, OverlayPlane, ClipPlanes, PickHandler
+│   ├── routing/        # route builder panel, anchor selection, result readout
+│   ├── overlays/       # overlay toggle + plane material
+│   ├── ui/             # shadcn components, panels, dialogs, login
+│   ├── state/          # zustand stores
+│   ├── hooks/          # shared hooks
+│   └── types/          # API DTOs (mirror api/schemas.py)
+├── index.html  vite.config.ts  tailwind.config.ts  package.json
 ```
 
-All layers should remain independent.
-
-Avoid tightly coupling:
-
-* BIM rendering
-* overlays
-* routing logic
+(Dev: Vite proxies `/api` → uvicorn. Prod: built into the Docker image, served by FastAPI — [spec-deploy] §5.)
 
 ---
 
-# 8. BIM Geometry Strategy
+## 6. API additions needed
 
-# 8.1 DO NOT Render Raw IFC Directly
+Most of the MVP rides on the existing Phase 2b endpoints. New work:
 
-Preferred workflow:
+| Endpoint | Purpose |
+|---|---|
+| `GET /models/{id}/floors/{n}/overlays/occupancy.png` | occupancy raster (from PreparedFloor) |
+| `GET /models/{id}/floors/{n}/overlays/clearance.png` | SDF heatmap raster |
+| extend `GET …/floors/{n}` | add `grid`: `{origin, resolution, shape, pipe_z, site_to_world}` for overlay placement |
 
-```text
-IFC
- ↓
-Backend preprocessing
- ↓
-Fragmented glTF/binary geometry
- ↓
-Frontend streaming
-```
+Plus the auth dependency + WS token check ([spec-deploy] §7). Picking, markers, routing, geometry, history all use endpoints that already exist.
 
 ---
 
-# 8.2 Geometry Fragmentation
+## 7. Build Sequencing
 
-Geometry should be split into:
+- [ ] **F-1** Vite + React + TS scaffold; Tailwind + shadcn; typed API client + Query providers; auth login + token interceptor.
+- [ ] **F-2** Model upload (progress) + model list/select/delete.
+- [ ] **F-3** Floor list + prepare button + WebSocket progress bar.
+- [ ] **F-4** Viewer: `<Canvas>`, camera controls, load `shell.glb` (Z-up), floor isolation.
+- [ ] **F-5** Markers (terminals/rooms) + side list; raycast point picking; route-builder state.
+- [ ] **F-6** Submit route (trunk/independent) → render `pipe.glb` + bend/branch markers + readout; route history; download glb.
+- [ ] **F-7** Overlays (occupancy/SDF plane, aligned) + clipping/section controls.
+- [ ] **F-8** Polish: error/empty/loading states, unreachable-target messaging, responsive panels.
 
-* floors
-* zones
-* fragments
-* chunks
-
-Benefits:
-
-* culling
-* lazy loading
-* visibility control
-* scalable rendering
+(Backend prerequisites D-1…D-4 in [spec-deploy.md] land before/with F-7.)
 
 ---
 
-# 8.3 Visibility Management
+## 8. What This Phase Does NOT Include
 
-Viewer must support:
-
-* isolate floor
-* isolate category
-* isolate system
-* hide selected
-* x-ray mode
-
----
-
-# 9. React Architecture
-
-# 9.1 State Management
-
-Recommended:
-
-* Zustand
-
-Reason:
-
-* lightweight
-* simple
-* excellent for viewer state
-
-Store examples:
-
-* selection state
-* clipping state
-* overlay visibility
-* routing state
-* active tool
-* camera bookmarks
+| Feature | Deferred to |
+|---|---|
+| Instanced-voxel / shader overlays (vs PNG plane) | Later (if PNG resolution insufficient) |
+| In-browser IFC (That Open Engine) | Later (client-side property inspection) |
+| Route editing / drag waypoints | Later |
+| Multi-floor / riser visualisation | Scale-out (engine doesn't route them yet) |
+| Corridor-graph / search-frontier overlays | Later |
+| Multi-user, collaboration, comments | Scale-out |
+| Mobile layout | Later |
 
 ---
 
-# 9.2 Data Fetching
-
-Recommended:
-
-* TanStack Query
-
-Use for:
-
-* model loading
-* route polling
-* cache management
-* async requests
-
----
-
-# 10. Viewer Components
-
-# 10.1 Main Viewer
-
-```tsx
-<ViewerCanvas />
-```
-
-Responsibilities:
-
-* initialize renderer
-* initialize scene
-* camera controls
-* render pipeline
-
----
-
-# 10.2 BIM Geometry Component
-
-```tsx
-<BimModel />
-```
-
-Responsibilities:
-
-* fragment loading
-* geometry rendering
-* metadata binding
-
----
-
-# 10.3 Overlay Components
-
-Examples:
-
-```tsx
-<SdfOverlay />
-<VoxelOverlay />
-<CorridorGraphOverlay />
-<RouteOverlay />
-```
-
-These should be toggleable independently.
-
----
-
-# 10.4 Interaction Tools
-
-Examples:
-
-```tsx
-<RouteTool />
-<SelectTool />
-<MeasureTool />
-<SectionTool />
-```
-
----
-
-# 11. Recommended Interaction Model
-
-# Selection Workflow
-
-```text
-click element
-    ↓
-retrieve GlobalId
-    ↓
-query metadata
-    ↓
-highlight selection
-```
-
----
-
-# Route Authoring Workflow
-
-```text
-select start point
-    ↓
-select endpoint
-    ↓
-configure route settings
-    ↓
-submit routing job
-    ↓
-stream progress
-    ↓
-display route
-```
-
----
-
-# 12. WebSocket Architecture
-
-Use WebSockets for:
-
-* routing progress
-* live updates
-* streaming previews
-* clash updates
-
-Example:
-
-```text
-frontend
-    ↕ websocket
-backend routing worker
-```
-
----
-
-# 13. Rendering Strategy
-
-# 13.1 Use Instancing
-
-For:
-
-* voxels
-* graph nodes
-* debug markers
-
-Avoid:
-
-* one mesh per object
-
----
-
-# 13.2 Use Frustum Culling
-
-Required for:
-
-* large BIM models
-* spatial overlays
-
----
-
-# 13.3 Lazy Loading
-
-Load:
-
-* visible floors
-* nearby zones
-* requested overlays
-
-Avoid loading entire buildings simultaneously.
-
----
-
-# 14. Overlay Rendering
-
-# 14.1 Voxel Overlay
-
-Purpose:
-
-* debug occupancy
-
-Representation:
-
-* instanced cubes
-
----
-
-# 14.2 SDF Overlay
-
-Purpose:
-
-* visualise clearance fields
-
-Representation:
-
-* heatmap slices
-* contour planes
-
----
-
-# 14.3 Corridor Graph Overlay
-
-Purpose:
-
-* visualise routing topology
-
-Representation:
-
-* line segments
-* graph nodes
-
----
-
-# 14.4 Route Overlay
-
-Purpose:
-
-* visualise generated routes
-
-Representation:
-
-* polylines during interaction
-* pipe meshes after finalisation
-
----
-
-# 15. Clipping & Sectioning
-
-The viewer must support:
-
-* clipping planes
-* floor slicing
-* section boxes
-* temporary cutaways
-
-These are essential for MEP workflows.
-
----
-
-# 16. Recommended Routing UX
-
-# Lightweight During Interaction
-
-While editing:
-
-* render simple polylines
-
-After confirmation:
-
-* generate detailed pipe geometry
-
-Benefits:
-
-* much faster interaction
-* lower GPU load
-
----
-
-# 17. Camera Controls
-
-Recommended features:
-
-* orbit
-* fly mode
-* orthographic mode
-* floor plan mode
-* saved viewpoints
-
----
-
-# 18. Performance Targets
-
-# Desktop
-
-Target:
-
-* 60 FPS interaction
-* large federated models
-
----
-
-# Mobile
-
-Optional future support:
-
-* limited overlays
-* reduced detail
-
----
-
-# 19. Recommended Frontend API Structure
-
-```text
-/api/models
-/api/routes
-/api/overlays
-/api/spatial
-/ws/routes
-```
-
----
-
-# 20. Suggested Viewer Folder Structure
-
-```text
-viewer/
-├── components/
-├── systems/
-├── hooks/
-├── overlays/
-├── tools/
-├── materials/
-├── loaders/
-├── interactions/
-└── rendering/
-```
-
----
-
-# 21. Suggested Overlay Folder Structure
-
-```text
-overlays/
-├── sdf/
-├── voxels/
-├── graphs/
-├── routes/
-├── clashes/
-└── measurements/
-```
-
----
-
-# 22. Recommended Viewer Systems
-
-# Rendering System
-
-Responsible for:
-
-* frame loop
-* renderer configuration
-* postprocessing
-
----
-
-# Selection System
-
-Responsible for:
-
-* raycasting
-* highlighting
-* metadata queries
-
----
-
-# Overlay System
-
-Responsible for:
-
-* debug visualisation
-* route overlays
-* spatial visualisation
-
----
-
-# Tool System
-
-Responsible for:
-
-* active interaction tools
-* route authoring
-* clipping tools
-
----
-
-# 23. Important Frontend Principles
-
-# DO
-
-* keep frontend lightweight
-* stream optimised geometry
-* isolate rendering layers
-* use backend spatial intelligence
-* visualise debugging information
-
----
-
-# DO NOT
-
-* parse giant IFCs in browser
-* build large voxel grids client-side
-* compute SDFs client-side
-* tightly couple overlays to geometry
-* render one mesh per voxel
-
----
-
-# 24. Recommended MVP Frontend Features
-
-## Phase 1
-
-* IFC model viewing
-* selection
-* clipping
-* route endpoint picking
-* route visualisation
-
----
-
-## Phase 2
-
-* voxel overlays
-* SDF overlays
-* corridor graphs
-* route editing
-
----
-
-## Phase 3
-
-* real-time rerouting
-* clash debugging
-* route optimisation visualisation
-* multi-user collaboration
-
----
-
-# 25. Final Recommended Frontend Stack
-
-## Core
-
-* React
-* TypeScript
-* react-three-fiber
-* Three.js
-
----
-
-## BIM
-
-* That Open Engine
-
----
-
-## UI
-
-* TailwindCSS
-* shadcn/ui
-
----
-
-## State
-
-* Zustand
-* TanStack Query
-
----
-
-## Communication
-
-* REST API
-* WebSockets
-
----
-
-# 26. Recommended Overall Frontend Philosophy
-
-The frontend should behave as:
-
-```text
-a high-performance BIM interaction layer
-```
-
-NOT:
-
-* a geometry-processing engine
-* a routing computation engine
-* a voxel computation engine
-
-Heavy spatial intelligence should remain server-side.
-
-The frontend should prioritise:
-
-* responsiveness
-* visual clarity
-* interaction quality
-* scalable rendering
-* modular overlays
-* routing UX
+## 9. Open Questions
+
+1. **Marker density** — 26 terminals + 44 spaces on one floor is fine; a dense model may need clustering / category filters.
+2. **Overlay plane vs depth** — at `pipe_z` the plane may z-fight with overhead structure; may need a small offset or render-order tweak.
+3. **Camera up-axis** — confirm Z-up handling end-to-end (shell, pipe, markers, overlay) on first integration; flip once at the root if needed.
+4. **Route result vs history** — show only the active route, or overlay multiple past routes? (MVP: active only.)
+5. **Large glb streaming** — if a floor shell is heavy, consider draco compression on export.
