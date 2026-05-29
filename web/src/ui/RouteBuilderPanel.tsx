@@ -41,6 +41,8 @@ export function RouteBuilderPanel({
   const activeId = useRouteBuilder((s) => s.activeId)
   const pickMode = useRouteBuilder((s) => s.pickMode)
   const setPickMode = useRouteBuilder((s) => s.setPickMode)
+  const editing = useRouteBuilder((s) => s.editing)
+  const setEditing = useRouteBuilder((s) => s.setEditing)
   const addGroup = useRouteBuilder((s) => s.addGroup)
   const removeGroup = useRouteBuilder((s) => s.removeGroup)
   const setActive = useRouteBuilder((s) => s.setActive)
@@ -92,6 +94,25 @@ export function RouteBuilderPanel({
 
   return (
     <div className="absolute top-3 right-3 bottom-3 flex w-72 flex-col gap-3 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900/90 p-3 text-neutral-100 backdrop-blur">
+      {/* 3D picking toggle — gates scene clicks to avoid accidental selection */}
+      <div className="space-y-1">
+        <button
+          onClick={() => setEditing(!editing)}
+          className={`w-full rounded-md px-2 py-1.5 text-sm font-medium ${
+            editing
+              ? 'bg-green-600 text-white hover:bg-green-500'
+              : 'border border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+          }`}
+        >
+          {editing ? '● 3D picking: ON' : '○ 3D picking: OFF'}
+        </button>
+        <p className="text-[11px] text-neutral-500">
+          {editing
+            ? 'Click markers / walls in the 3D view to assign.'
+            : 'Scene clicks navigate only. Right-click a marker to manage.'}
+        </p>
+      </div>
+
       {/* Systems */}
       <div className="space-y-1">
         <div className="flex items-center justify-between">

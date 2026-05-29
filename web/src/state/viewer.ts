@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { ColorMode } from '@/viewer/colors'
 
-export type OverlayKind = 'none' | 'occupancy' | 'clearance'
+export type OverlayKind = 'none' | 'occupancy' | 'clearance' | 'rooms'
 
 interface ViewerState {
   overlay: OverlayKind

@@ -15,6 +15,11 @@ export function toAnchorIn(a: AnchorSel): AnchorIn {
   return { type: a.kind, id: a.id, xyz: a.xyz }
 }
 
+export function sameAnchor(a: AnchorSel, b: AnchorSel): boolean {
+  if (a.kind !== b.kind) return false
+  return a.kind === 'point' ? JSON.stringify(a.xyz) === JSON.stringify(b.xyz) : a.id === b.id
+}
+
 // A routing "system": one source feeding N targets, rendered in its own colour.
 export interface RouteGroup {
   id: string
@@ -40,6 +45,8 @@ interface RouteBuilderState {
   groups: RouteGroup[]
   activeId: string
   pickMode: PickMode
+  editing: boolean
+  setEditing: (e: boolean) => void
   setPickMode: (m: PickMode) => void
   addGroup: () => void
   removeGroup: (id: string) => void
@@ -48,6 +55,9 @@ interface RouteBuilderState {
   pick: (a: AnchorSel) => void
   removeTarget: (id: string, index: number) => void
   clearSource: (id: string) => void
+  assignSource: (a: AnchorSel) => void
+  appendTarget: (a: AnchorSel) => void
+  removeAnchor: (a: AnchorSel) => void
   reset: () => void
 }
 
@@ -61,6 +71,8 @@ export const useRouteBuilder = create<RouteBuilderState>((set) => {
     groups: [first],
     activeId: first.id,
     pickMode: 'source',
+    editing: false,
+    setEditing: (e) => set({ editing: e }),
     setPickMode: (m) => set({ pickMode: m }),
 
     addGroup: () =>
@@ -103,10 +115,28 @@ export const useRouteBuilder = create<RouteBuilderState>((set) => {
     clearSource: (id) =>
       set((st) => ({ groups: mapGroup(st.groups, id, (g) => ({ ...g, source: null })) })),
 
+    // Active-group helpers used by the marker context menu.
+    assignSource: (a) =>
+      set((st) => ({ groups: mapGroup(st.groups, st.activeId, (g) => ({ ...g, source: a })) })),
+    appendTarget: (a) =>
+      set((st) => ({
+        groups: mapGroup(st.groups, st.activeId, (g) =>
+          a.id && g.targets.some((t) => t.id === a.id) ? g : { ...g, targets: [...g.targets, a] },
+        ),
+      })),
+    removeAnchor: (a) =>
+      set((st) => ({
+        groups: mapGroup(st.groups, st.activeId, (g) => ({
+          ...g,
+          source: g.source && sameAnchor(g.source, a) ? null : g.source,
+          targets: g.targets.filter((t) => !sameAnchor(t, a)),
+        })),
+      })),
+
     reset: () =>
       set(() => {
         const g = newGroup()
-        return { groups: [g], activeId: g.id, pickMode: 'source' }
+        return { groups: [g], activeId: g.id, pickMode: 'source', editing: false }
       }),
   }
 })

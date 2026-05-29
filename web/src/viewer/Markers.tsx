@@ -1,7 +1,8 @@
 import type { ThreeEvent } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import { useRouteBuilder } from '@/state/routeBuilder'
-import type { PickKind } from '@/state/routeBuilder'
+import type { AnchorSel, PickKind } from '@/state/routeBuilder'
+import { useContextMenu } from '@/state/contextMenu'
 import { useViewer } from '@/state/viewer'
 import type { FloorDetail } from '@/api/types'
 
@@ -21,6 +22,9 @@ function Marker(props: {
 }) {
   const { pos, kind, id, label, showLabel } = props
   const pick = useRouteBuilder((s) => s.pick)
+  const editing = useRouteBuilder((s) => s.editing)
+  const openMenu = useContextMenu((s) => s.open)
+  const anchor: AnchorSel = { kind, id, label }
   const isSource = useRouteBuilder((s) => {
     const g = s.groups.find((x) => x.id === s.activeId)
     return g?.source?.id === id
@@ -38,10 +42,17 @@ function Marker(props: {
     <mesh
       position={pos}
       onClick={(e: ThreeEvent<MouseEvent>) => {
+        if (!editing) return
         e.stopPropagation()
-        pick({ kind, id, label })
+        pick(anchor)
+      }}
+      onContextMenu={(e: ThreeEvent<MouseEvent>) => {
+        e.stopPropagation()
+        e.nativeEvent.preventDefault()
+        openMenu(anchor, e.nativeEvent.clientX, e.nativeEvent.clientY)
       }}
       onPointerOver={(e) => {
+        if (!editing) return
         e.stopPropagation()
         document.body.style.cursor = 'pointer'
       }}

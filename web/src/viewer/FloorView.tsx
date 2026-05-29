@@ -11,16 +11,19 @@ import { useViewer } from '@/state/viewer'
 import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
 import { ViewerControls } from '@/ui/ViewerControls'
 import { Legend } from '@/ui/Legend'
+import { ContextMenu } from '@/ui/ContextMenu'
 import { BimShell } from './BimShell'
 import { Clipping } from './Clipping'
 import { Markers } from './Markers'
 import { OverlayPlane } from './OverlayPlane'
 import { PipeNetwork } from './PipeNetwork'
+import { PointMarkers } from './PointMarkers'
 import { buildScale } from './colors'
 
 export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex: number }) {
   const closeFloor = useSelection((s) => s.closeFloor)
   const pick = useRouteBuilder((s) => s.pick)
+  const editing = useRouteBuilder((s) => s.editing)
   const reset = useRouteBuilder((s) => s.reset)
   const groups = useRouteBuilder((s) => s.groups)
   const results = useRouteResults((s) => s.byGroup)
@@ -87,7 +90,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
                 key={overlay}
                 grid={grid}
                 url={api.overlayUrl(modelId, floorIndex, overlay)}
-                crisp={overlay === 'occupancy'}
+                crisp={overlay === 'occupancy' || overlay === 'rooms'}
               />
             </Suspense>
           )}
@@ -97,6 +100,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
             <Bounds fit clip margin={1.2}>
               <group
                 onClick={(e: ThreeEvent<MouseEvent>) => {
+                  if (!editing) return
                   e.stopPropagation()
                   const p = e.point
                   pick({
@@ -110,6 +114,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
               </group>
             </Bounds>
             {floor.data && <Markers floor={floor.data} />}
+            <PointMarkers />
           </Suspense>
 
           {groups.map((g) => {
@@ -140,6 +145,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
         {floor.data && (
           <RouteBuilderPanel modelId={modelId} floorIndex={floorIndex} floor={floor.data} />
         )}
+        <ContextMenu />
       </div>
     </div>
   )

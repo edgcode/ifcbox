@@ -4,6 +4,7 @@ import type {
   FloorDetail,
   ModelOut,
   ModelSummary,
+  RoomClass,
   RouteRequest,
   RouteResult,
   RouteSummary,
@@ -62,9 +63,10 @@ export const api = {
   prepareFloor: (id: string, n: number) =>
     req<{ status: string }>(`/models/${id}/floors/${n}/prepare`, { method: 'POST' }),
   geometryUrl: (id: string, n: number) => `/api/v1/models/${id}/floors/${n}/geometry`,
-  overlayUrl: (id: string, n: number, kind: 'occupancy' | 'clearance') =>
+  overlayUrl: (id: string, n: number, kind: 'occupancy' | 'clearance' | 'rooms') =>
     `/api/v1/models/${id}/floors/${n}/overlays/${kind}`,
   getWalls: (id: string, n: number) => req<Walls>(`/models/${id}/floors/${n}/walls`),
+  getRoomClasses: () => req<RoomClass[]>('/room-classes'),
 
   submitRoute: (id: string, n: number, body: RouteRequest) =>
     req<RouteResult>(`/models/${id}/floors/${n}/routes`, {

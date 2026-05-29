@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query'
+import { api } from '@/api/client'
 import { useViewer } from '@/state/viewer'
 import type { OverlayKind } from '@/state/viewer'
 import type { ColorMode } from '@/viewer/colors'
@@ -6,7 +8,8 @@ import type { GridMeta } from '@/api/types'
 const OVERLAYS: { v: OverlayKind; label: string }[] = [
   { v: 'none', label: 'None' },
   { v: 'occupancy', label: 'Occupancy' },
-  { v: 'clearance', label: 'SDF' },
+  { v: 'clearance', label: 'SDF (clearance)' },
+  { v: 'rooms', label: 'Room types' },
 ]
 
 const COLOR_MODES: { v: ColorMode; label: string }[] = [
@@ -29,6 +32,13 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
   const toggle = useViewer((s) => s.toggle)
   const colorMode = useViewer((s) => s.colorMode)
   const setColorMode = useViewer((s) => s.setColorMode)
+
+  const roomClasses = useQuery({
+    queryKey: ['room-classes'],
+    queryFn: api.getRoomClasses,
+    staleTime: Infinity,
+    enabled: overlay === 'rooms',
+  })
 
   const pz = grid?.pipe_z ?? 0
   const min = pz - 3
@@ -53,19 +63,27 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
 
       <div className="space-y-1">
         <p className="text-xs font-medium text-neutral-400">Overlay</p>
-        <div className="flex overflow-hidden rounded-md border border-neutral-700 text-xs">
+        <select
+          value={overlay}
+          onChange={(e) => setOverlay(e.target.value as OverlayKind)}
+          className="w-full rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs"
+        >
           {OVERLAYS.map((o) => (
-            <button
-              key={o.v}
-              onClick={() => setOverlay(o.v)}
-              className={`flex-1 px-2 py-1 ${
-                overlay === o.v ? 'bg-neutral-100 text-neutral-900' : 'text-neutral-300'
-              }`}
-            >
+            <option key={o.v} value={o.v}>
               {o.label}
-            </button>
+            </option>
           ))}
-        </div>
+        </select>
+        {overlay === 'rooms' && roomClasses.data && (
+          <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto">
+            {roomClasses.data.map((rc) => (
+              <li key={rc.key} className="flex items-center gap-2 text-[11px]">
+                <span className="h-3 w-3 shrink-0 rounded-sm" style={{ backgroundColor: rc.color }} />
+                <span className="truncate text-neutral-300">{rc.label}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       <div className="space-y-1">

@@ -65,6 +65,12 @@ export interface WallAttrs {
 
 export type Walls = Record<string, WallAttrs>
 
+export interface RoomClass {
+  key: string
+  label: string
+  color: string
+}
+
 export type AnchorType = 'point' | 'terminal' | 'room'
 
 export interface AnchorIn {
