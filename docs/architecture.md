@@ -110,7 +110,7 @@ Grids are plain numpy arrays shaped `[nx, ny]`: `occupancy` (bool), `clearance` 
 - Collapses collinear runs to minimal bend points. Converts voxel indices → site-aligned world XYZ, then (via `SiteTransform.to_world`) back to true world coords for export. `path_length` for reporting.
 
 ### `mesh.py` — waypoints → pipe mesh
-- Extrudes a circular cross-section (cylinder segments + sphere caps) along the waypoints into a single trimesh. Default diameter 100 mm (CHW).
+- Extrudes a circular cross-section (cylinder segments + sphere caps) along the waypoints into a single trimesh. Default diameter 100 mm.
 
 ### `export.py` — outputs
 - `export_json` (waypoints + metadata: diameter, discipline) and `export_gltf` (`pipe.glb`).

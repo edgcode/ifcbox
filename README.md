@@ -1,12 +1,12 @@
-# IFCBox — automatic CHW pipe routing for BIM models
+# IFCBox — automatic pipe routing for BIM models
 
-IFCBox takes an **IFC building model**, lets an MEP engineer pick two (or many) points on a floor, and computes a **draft chilled-water pipe route** that threads through corridors, dodges walls, and prefers door openings — then renders it in an interactive 3D web viewer.
+IFCBox takes an **IFC building model**, lets an MEP engineer pick two (or many) points on a floor, and computes a **draft pipe route** that threads through corridors, dodges walls, and prefers door openings — then renders it in an interactive 3D web viewer.
 
-It's a spatial-intelligence engine (Python) behind a FastAPI backend and a React + three.js front end, deployable as a single Docker image on Render with Cloudflare R2 + Postgres.
+It's a spatial-intelligence engine (Python) behind a FastAPI backend and a React + three.js front end, deployable as a single Docker image on Render with Cloudflare R2 + Postgres. The engine is **discipline-agnostic** — it routes a generic piping system; pressurised distribution (no gravity constraints) is the first focus.
 
-![Routed floor plan](docs/images/route-scene.png)
+![Floor model](docs/images/scene-no-route.png)
 
-> A prepared floor of the test model: walls by IFC type, **green** circulation (Flur), **red** forbidden stairwells (Treppenraum), **yellow** door-crossing zones, room labels, and the **blue** routed pipe from a corridor to a bathroom.
+> A prepared floor of the test model: walls colour-coded by IFC type, **green** circulation (Flur), **red** forbidden stairwells (Treppenraum), **yellow** door-crossing zones, and room labels — the spatial picture the router works from.
 
 - **Live demo:** _deploying to Render — URL TBA_ (gated by a shared app token)
 - **Try it / run it locally:** [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
@@ -16,7 +16,7 @@ It's a spatial-intelligence engine (Python) behind a FastAPI backend and a React
 
 ## Why
 
-Manual pipe routing (getting a line from A to B through a real building) is the most universal, repetitive pain in MEP design. IFCBox targets a **draft / starting-point** route — fast and useful, without taking on construction-readiness liability — for **chilled water (CHW)** as the first discipline (no gravity constraints).
+Manual pipe routing (getting a line from A to B through a real building) is the most universal, repetitive pain in MEP design. IFCBox targets a **draft / starting-point** route — fast and useful, without taking on construction-readiness liability. It's discipline-agnostic; pressurised distribution piping (no gravity constraints) is the first focus.
 
 ---
 
@@ -54,12 +54,37 @@ A\* searches the cost grid with state `(x, y, direction)`: **4-connected, 90° b
 ### 6 · Smooth → pipe mesh
 The voxel path is collapsed to **minimal bend-point waypoints**, transformed back to world coordinates, and extruded into a circular pipe mesh exported as glTF.
 
+![Routed pipe](docs/images/route-scene.png)
+
+> The same floor with a routed pipe (**blue**) from a corridor to a bathroom; the markers are the collapsed bend points.
+
 ### 7 · Multiple targets → shared trunk (Steiner)
-For one source feeding many targets, the first target is routed from the source, then each further target is routed from the **existing network** (multi-source A\* seeding) — producing a shared supply main with branches, like real CHW distribution. Multiple independent "systems" (e.g. one plant room per zone) are supported.
+For one source feeding many targets, the first target is routed from the source, then each further target is routed from the **existing network** (multi-source A\* seeding) — producing a shared supply main with branches, like real distribution piping. Multiple independent "systems" (e.g. one plant room per zone) are supported.
 
-The same per-floor data also drives the viewer's debug overlays — occupancy, the SDF heatmap, and **room-type** shading — and per-wall colour modes (thickness / wall-type / fire-rating, read from the IFC):
+The same per-floor data also drives the viewer's debug overlays — occupancy, the SDF heatmap, and **room-type** shading — and per-wall colour modes read straight from the IFC: **wall type**, **fire rating**, and **thickness**.
 
-![Wall types](docs/images/wall-types.png)
+![Wall type](docs/images/wall-types.png)
+![Wall fire rating](docs/images/fire-rating.png)
+![Wall thickness](docs/images/wall-thickness.png)
+
+> Fire rating in particular reveals the apartment/compartment boundaries (the F-rated walls), which the planned front-end demo uses to bound each apartment.
+
+### Per-apartment routing (the `demo_routes.py` demo)
+
+`demo_routes.py` auto-discovers the apartments on a storey and routes a shared trunk from each apartment's **hallway (Flur)** to all of its rooms — no manual endpoint picking.
+
+![Per-apartment routes](docs/images/demo-routes.png)
+
+> Ground floor: each apartment's Flur (▢, the trunk source) fans out to its rooms (◆) in blue; walls shaded by thickness, stairwells forbidden (red), door-crossing zones yellow.
+
+How it discovers an apartment, purely from the IFC:
+1. **Space footprints** — slice every `IfcSpace` at the floor into a 2D polygon (with a guaranteed-interior representative point as its centroid).
+2. **Door-adjacency graph** — for each `IfcDoor`, sample a point 0.35 m to either side (perpendicular to the wall) and record which two spaces it connects → an edge. Open-plan spaces with no wall between them are linked by a small-gap proximity test.
+3. **Find the hallways** — `IfcSpace`s named like *Flur / Korridor / Diele* (DE) or *corridor / hall* (EN).
+4. **Flood-fill the apartment** — a breadth-first search from each Flur through the door graph collects every room reachable from it; that connected set **is** the apartment.
+5. **Route the trunk** — a shared main from the Flur branches to each room (strict door crossings only; never through stairwells).
+
+> The CLI demo bounds apartments by door **topology**. A planned front-end demo will additionally stop the flood-fill at **fire-rated walls** (the real apartment/compartment boundary) — see [spec-frontend.md](plans/spec-frontend.md).
 
 ---
 

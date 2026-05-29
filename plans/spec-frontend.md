@@ -169,3 +169,32 @@ Plus the auth dependency + WS token check ([spec-deploy] §7). Picking, markers,
 3. **Camera up-axis** — confirm Z-up handling end-to-end (shell, pipe, markers, overlay) on first integration; flip once at the root if needed.
 4. **Route result vs history** — show only the active route, or overlay multiple past routes? (MVP: active only.)
 5. **Large glb streaming** — if a floor shell is heavy, consider draco compression on export.
+
+---
+
+## 10. Planned — apartment auto-routing demo
+
+A one-click demo that mirrors `demo_routes.py` in the web app: **discover each apartment on a floor and route a trunk from its hallway (Flur) to every room**, with each apartment rendered as its own coloured system. Unlike the CLI demo (which bounds apartments by door topology alone), this version bounds them by **fire-rated walls** — the real apartment/compartment boundary — so the flood-fill can't leak into a neighbour through a shared fire door.
+
+### Why fire-rated walls
+Apartment-separating / corridor walls in this model carry a `Pset_WallCommon.FireRating` (e.g. `F90-A`, `BWEW`). The engine already reads per-element `fire_rating` (`FloorGeometry.elements`, served in `walls.json`). Treating a door set in a fire-rated wall as a **non-traversable boundary** turns "rooms reachable from the Flur" into "rooms in the same apartment".
+
+### Backend
+- **Extract apartment discovery into the library** — move `build_door_adjacency` + Flur detection + BFS out of `demo_routes.py` into `ifcbox/apartments.py` so the API and CLI share it.
+- **Door → host wall → fire rating.** For each `IfcDoor`, resolve its host wall (`IfcRelFillsElement` → `IfcOpeningElement` → `IfcRelVoidsElement` → wall) and read that wall's fire rating. Fallback when the relation is missing: sample the wall voxel(s) under the door against the per-element wall map. Tag each adjacency edge `fire_rated: bool`.
+- **Discovery** = build the door-adjacency graph (edges tagged), find Flur spaces, then **BFS from each Flur, skipping fire-rated edges** → `{flur_id, flur_name, room_ids[]}` per apartment.
+- **Compute at prepare time** (model + geometry already in hand) and persist `apartments.json` next to `walls.json` / `rooms.png`; serve it:
+  `GET /models/{id}/floors/{n}/apartments → [{flur_id, flur_name, room_ids}]`.
+
+### Frontend
+- A **"Route apartments"** action in the route panel: fetch `/apartments`, and for each apartment create a routing **system** (`source` = Flur `RoomAnchor`, `targets` = its rooms as `RoomAnchor`s, `mode = trunk`), then **Route all** — one colour per apartment.
+- Optional: a "highlight apartments" toggle that tints the room-type overlay by apartment-id instead of room type (reuses the overlay-plane plumbing).
+
+### Sequencing
+- [ ] **A-1** `ifcbox/apartments.py` (shared discovery) + door→host-wall→fire-rating; unit-test apartment counts on the test model.
+- [ ] **A-2** prepare writes `apartments.json`; `GET …/apartments` endpoint.
+- [ ] **A-3** front-end "Route apartments" → auto-create systems → Route all.
+
+### Open questions
+- **Fire-door detection reliability** — IFC door↔wall relations vary by exporter; the voxel-sampling fallback needs validating on more models.
+- **Flur-less apartments** — apartments with no space named like a corridor need a fallback seed (e.g. the space containing the entrance door, or the largest space).
