@@ -177,6 +177,13 @@ built bundle (single origin).
 | Picking | markers + raycast point-on-shell → point / terminal / room anchors |
 | Routing | multi-source **systems** (N independent source→targets, trunk/independent), "Route all" |
 | Render | per-system `pipe.glb` in system colour + junction spheres; readout + glb download |
+| Overlays (F-7) | occupancy / SDF / **room-type** rasters on a floor-aligned plane + legends; section clip |
+| Wall colour modes (F-9) | per-element shading by thickness / wall-type / fire-rating + legend (thickness capped 500 mm, non-walls excluded) |
+| Marker UX | point-pick diamonds, **right-click context menu** (set/remove source/target), **3D-picking edit-mode gate** (default off) |
+| Theme | light / dark toggle (persisted, default dark); HUD panels stay dark glass in both |
+
+New API added for the frontend: per-floor `geometry` (now per-element shell + `walls.json`),
+`overlays/{occupancy,clearance,rooms}`, floor `grid` meta, `/room-classes`.
 
 Key fixes / decisions during the build:
 - **Coordinate frame:** the shell glTF and CLI PyVista view must use site→world
@@ -184,15 +191,16 @@ Key fixes / decisions during the build:
   pipe are true world coords, so the shell rendered detached until fixed.
 - **Camera:** only the shell sits inside drei `<Bounds>`, with `observe` OFF — fit once
   on load; clicking a marker no longer refits/flies the camera.
+- **Per-element shell:** colour modes need one mesh per IFC element; node names are
+  GlobalIds (trimesh may suffix split meshes `_n` → frontend falls back to the stripped id).
 - Viewer renders server glTF only (no That Open Engine).
-- The frontend rides existing Phase-2b endpoints; only overlays (F-7) need new API.
 
 ### Frontend — remaining
 
-- **F-7:** occupancy/SDF overlays (server PNG on a floor-aligned plane) + clipping/section.
-  Needs backend **D-4** (overlay PNG endpoints + floor `grid` meta for plane alignment).
-- **F-8:** polish — error/empty/loading states, marker clustering if dense, per-system
-  route history (dropped in the F-6b rewrite).
+- **Auth-aware asset loading:** `useGLTF` / `useTexture` don't send `X-App-Token`; wire a
+  token-aware loader when auth (D-3) lands.
+- Optional: per-system route history (dropped in the F-6b rewrite); viewer code-split
+  (three.js makes the bundle ~1.2 MB).
 
 ### Deployment — not started ([spec-deploy.md](spec-deploy.md) D-1…D-6)
 
