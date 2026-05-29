@@ -1,18 +1,28 @@
-import { Suspense } from 'react'
+import { Suspense, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
+import type { ThreeEvent } from '@react-three/fiber'
 import { Bounds, Loader, OrbitControls } from '@react-three/drei'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useSelection } from '@/state/selection'
+import { useRouteBuilder } from '@/state/routeBuilder'
+import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
 import { BimShell } from './BimShell'
+import { Markers } from './Markers'
 
 export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex: number }) {
   const closeFloor = useSelection((s) => s.closeFloor)
+  const pick = useRouteBuilder((s) => s.pick)
+  const reset = useRouteBuilder((s) => s.reset)
+
   const floor = useQuery({
     queryKey: ['floor', modelId, floorIndex],
     queryFn: () => api.floorDetail(modelId, floorIndex),
   })
   const url = api.geometryUrl(modelId, floorIndex)
+
+  // Clear the route builder when switching floors/models.
+  useEffect(() => reset(), [modelId, floorIndex, reset])
 
   return (
     <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
@@ -30,7 +40,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
 
       <div className="relative flex-1">
         <Canvas
-          // Z-up scene to match IFC/Revit world coords (shell, pipe, markers all share it)
+          // Z-up scene to match IFC/Revit world coords (shell, markers, pipe all share it)
           camera={{ up: [0, 0, 1], position: [25, -30, 20], fov: 50, near: 0.1, far: 5000 }}
         >
           <ambientLight intensity={0.7} />
@@ -38,12 +48,26 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
           <directionalLight position={[-30, 20, 30]} intensity={0.5} />
           <Suspense fallback={null}>
             <Bounds fit clip observe margin={1.2}>
-              <BimShell url={url} />
+              <group
+                onClick={(e: ThreeEvent<MouseEvent>) => {
+                  e.stopPropagation()
+                  const p = e.point
+                  pick({
+                    kind: 'point',
+                    xyz: [p.x, p.y, p.z],
+                    label: `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`,
+                  })
+                }}
+              >
+                <BimShell url={url} />
+              </group>
+              {floor.data && <Markers floor={floor.data} />}
             </Bounds>
           </Suspense>
           <OrbitControls makeDefault enableDamping />
         </Canvas>
         <Loader />
+        {floor.data && <RouteBuilderPanel floor={floor.data} />}
       </div>
     </div>
   )
