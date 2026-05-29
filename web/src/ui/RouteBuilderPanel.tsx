@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError } from '@/api/client'
 import { useRouteBuilder, toAnchorIn } from '@/state/routeBuilder'
 import type { AnchorSel } from '@/state/routeBuilder'
-import { useActiveRoute } from '@/state/activeRoute'
-import type { FloorDetail } from '@/api/types'
+import { useRouteResults } from '@/state/routeResults'
+import type { FloorDetail, RouteResult } from '@/api/types'
 
 function Seg<T extends string>(props: {
   value: T
@@ -37,40 +37,47 @@ export function RouteBuilderPanel({
   floorIndex: number
   floor: FloorDetail
 }) {
-  const source = useRouteBuilder((s) => s.source)
-  const targets = useRouteBuilder((s) => s.targets)
-  const mode = useRouteBuilder((s) => s.mode)
+  const groups = useRouteBuilder((s) => s.groups)
+  const activeId = useRouteBuilder((s) => s.activeId)
   const pickMode = useRouteBuilder((s) => s.pickMode)
   const setPickMode = useRouteBuilder((s) => s.setPickMode)
+  const addGroup = useRouteBuilder((s) => s.addGroup)
+  const removeGroup = useRouteBuilder((s) => s.removeGroup)
+  const setActive = useRouteBuilder((s) => s.setActive)
   const setMode = useRouteBuilder((s) => s.setMode)
   const pick = useRouteBuilder((s) => s.pick)
   const removeTarget = useRouteBuilder((s) => s.removeTarget)
   const clearSource = useRouteBuilder((s) => s.clearSource)
   const reset = useRouteBuilder((s) => s.reset)
 
-  const result = useActiveRoute((s) => s.result)
-  const setResult = useActiveRoute((s) => s.setResult)
+  const byGroup = useRouteResults((s) => s.byGroup)
+  const setResult = useRouteResults((s) => s.setResult)
+  const clearResults = useRouteResults((s) => s.clear)
   const qc = useQueryClient()
 
-  const submit = useMutation({
-    mutationFn: () =>
-      api.submitRoute(modelId, floorIndex, {
-        source: toAnchorIn(source!),
-        targets: targets.map(toAnchorIn),
-        mode,
-      }),
-    onSuccess: (res) => {
-      setResult(res)
+  const active = groups.find((g) => g.id === activeId) ?? groups[0]
+
+  const submitAll = useMutation({
+    mutationFn: async () => {
+      const out: { gid: string; res: RouteResult }[] = []
+      for (const g of groups) {
+        if (!g.source || g.targets.length === 0) continue
+        const res = await api.submitRoute(modelId, floorIndex, {
+          source: toAnchorIn(g.source),
+          targets: g.targets.map(toAnchorIn),
+          mode: g.mode,
+        })
+        out.push({ gid: g.id, res })
+      }
+      return out
+    },
+    onSuccess: (out) => {
+      out.forEach(({ gid, res }) => setResult(gid, res))
       qc.invalidateQueries({ queryKey: ['routes', modelId] })
     },
   })
 
-  const routes = useQuery({ queryKey: ['routes', modelId], queryFn: () => api.listRoutes(modelId) })
-  const loadRoute = useMutation({
-    mutationFn: (id: string) => api.getRoute(id),
-    onSuccess: (res) => setResult(res),
-  })
-
+  const completeCount = groups.filter((g) => g.source && g.targets.length > 0).length
   const [q, setQ] = useState('')
   const items = useMemo<AnchorSel[]>(() => {
     const all: AnchorSel[] = [
@@ -81,43 +88,84 @@ export function RouteBuilderPanel({
     return all.filter((i) => i.label.toLowerCase().includes(needle))
   }, [floor, q])
 
-  const canRoute = !!source && targets.length > 0 && !submit.isPending
-  const floorRoutes = routes.data?.filter((r) => r.floor_index === floorIndex) ?? []
+  const activeResult = byGroup[active.id]
 
   return (
     <div className="absolute top-3 right-3 bottom-3 flex w-72 flex-col gap-3 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900/90 p-3 text-neutral-100 backdrop-blur">
+      {/* Systems */}
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Picking assigns to</p>
-        <Seg
-          value={pickMode}
-          onChange={setPickMode}
-          options={[
-            { v: 'source', label: 'Source' },
-            { v: 'target', label: 'Target' },
-          ]}
-        />
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-neutral-400">Systems ({groups.length})</p>
+          <button onClick={addGroup} className="text-xs text-blue-400 hover:underline">
+            + Add
+          </button>
+        </div>
+        <div className="space-y-1">
+          {groups.map((g, i) => {
+            const res = byGroup[g.id]
+            const isActive = g.id === active.id
+            return (
+              <div
+                key={g.id}
+                className={`flex items-center gap-2 rounded border px-2 py-1 ${
+                  isActive ? 'border-neutral-400 bg-neutral-800' : 'border-neutral-800'
+                }`}
+              >
+                <span
+                  className="h-3 w-3 shrink-0 rounded-full"
+                  style={{ backgroundColor: g.color }}
+                />
+                <button onClick={() => setActive(g.id)} className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-xs font-medium">System {i + 1}</p>
+                  <p className="truncate text-[11px] text-neutral-400">
+                    {g.source ? g.source.label : 'no source'} → {g.targets.length}
+                    {res && ` · ${res.total_length_m.toFixed(1)} m`}
+                  </p>
+                </button>
+                <button
+                  onClick={() => removeGroup(g.id)}
+                  className="text-neutral-500 hover:text-red-400"
+                >
+                  ✕
+                </button>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Mode</p>
-        <Seg
-          value={mode}
-          onChange={setMode}
-          options={[
-            { v: 'trunk', label: 'Trunk' },
-            { v: 'independent', label: 'Independent' },
-          ]}
-        />
-      </div>
+      <hr className="border-neutral-800" />
+
+      {/* Active system editor */}
+      <p className="text-xs font-medium text-neutral-300">
+        Editing System {groups.findIndex((g) => g.id === active.id) + 1}
+      </p>
+
+      <Seg
+        value={pickMode}
+        onChange={setPickMode}
+        options={[
+          { v: 'source', label: 'Source' },
+          { v: 'target', label: 'Target' },
+        ]}
+      />
+      <Seg
+        value={active.mode}
+        onChange={(m) => setMode(active.id, m)}
+        options={[
+          { v: 'trunk', label: 'Trunk' },
+          { v: 'independent', label: 'Independent' },
+        ]}
+      />
 
       <div className="space-y-1">
         <p className="text-xs font-medium text-neutral-400">Source</p>
-        {source ? (
+        {active.source ? (
           <div className="flex items-center justify-between rounded bg-green-600/20 px-2 py-1 text-xs">
             <span className="truncate">
-              {source.kind}: {source.label}
+              {active.source.kind}: {active.source.label}
             </span>
-            <button onClick={clearSource} className="text-neutral-400 hover:text-white">
+            <button onClick={() => clearSource(active.id)} className="text-neutral-400 hover:text-white">
               ✕
             </button>
           </div>
@@ -127,9 +175,9 @@ export function RouteBuilderPanel({
       </div>
 
       <div className="space-y-1">
-        <p className="text-xs font-medium text-neutral-400">Targets ({targets.length})</p>
-        <div className="max-h-24 space-y-1 overflow-auto">
-          {targets.map((t, i) => (
+        <p className="text-xs font-medium text-neutral-400">Targets ({active.targets.length})</p>
+        <div className="max-h-20 space-y-1 overflow-auto">
+          {active.targets.map((t, i) => (
             <div
               key={`${t.id ?? 'pt'}-${i}`}
               className="flex items-center justify-between rounded bg-blue-600/20 px-2 py-1 text-xs"
@@ -137,55 +185,19 @@ export function RouteBuilderPanel({
               <span className="truncate">
                 {t.kind}: {t.label}
               </span>
-              <button onClick={() => removeTarget(i)} className="text-neutral-400 hover:text-white">
+              <button
+                onClick={() => removeTarget(active.id, i)}
+                className="text-neutral-400 hover:text-white"
+              >
                 ✕
               </button>
             </div>
           ))}
-          {targets.length === 0 && <p className="text-xs text-neutral-500">none</p>}
+          {active.targets.length === 0 && <p className="text-xs text-neutral-500">none</p>}
         </div>
       </div>
 
-      <button
-        onClick={() => submit.mutate()}
-        disabled={!canRoute}
-        className="rounded-md bg-blue-600 px-2 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
-      >
-        {submit.isPending ? 'Routing…' : 'Find route'}
-      </button>
-      {submit.error && (
-        <p className="text-xs text-red-400">
-          {submit.error instanceof ApiError && submit.error.status === 409
-            ? 'Floor not prepared.'
-            : `Route failed: ${(submit.error as Error).message}`}
-        </p>
-      )}
-
-      {result && (
-        <div className="space-y-1 rounded border border-neutral-700 bg-neutral-800/60 p-2 text-xs">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">Route · {result.mode}</span>
-            <button onClick={() => setResult(null)} className="text-neutral-400 hover:text-white">
-              clear
-            </button>
-          </div>
-          <p className="text-neutral-300">
-            {result.total_length_m.toFixed(2)} m · {result.segments.length} segment(s)
-          </p>
-          {result.unreachable_targets.length > 0 && (
-            <p className="text-amber-400">{result.unreachable_targets.length} unreachable</p>
-          )}
-          <a
-            href={api.meshUrl(result.route_id)}
-            download
-            className="inline-block text-blue-400 hover:underline"
-          >
-            Download pipe.glb
-          </a>
-        </div>
-      )}
-
-      <div className="flex min-h-32 flex-1 flex-col gap-1">
+      <div className="flex min-h-28 flex-1 flex-col gap-1">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -209,31 +221,47 @@ export function RouteBuilderPanel({
         </ul>
       </div>
 
-      {floorRoutes.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs font-medium text-neutral-400">History ({floorRoutes.length})</p>
-          <div className="max-h-24 space-y-1 overflow-auto">
-            {floorRoutes.map((r) => (
-              <button
-                key={r.route_id}
-                onClick={() => loadRoute.mutate(r.route_id)}
-                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-neutral-800"
-              >
-                <span>{r.mode}</span>
-                <span className="text-neutral-400">
-                  {r.total_length_m.toFixed(1)} m · {r.segment_count}
-                </span>
-              </button>
-            ))}
-          </div>
+      {activeResult && (
+        <div className="space-y-0.5 rounded border border-neutral-700 bg-neutral-800/60 p-2 text-xs">
+          <p className="text-neutral-300">
+            {activeResult.total_length_m.toFixed(2)} m · {activeResult.segments.length} segment(s)
+          </p>
+          {activeResult.unreachable_targets.length > 0 && (
+            <p className="text-amber-400">{activeResult.unreachable_targets.length} unreachable</p>
+          )}
+          <a
+            href={api.meshUrl(activeResult.route_id)}
+            download
+            className="inline-block text-blue-400 hover:underline"
+          >
+            Download pipe.glb
+          </a>
         </div>
       )}
 
       <button
-        onClick={reset}
+        onClick={() => submitAll.mutate()}
+        disabled={completeCount === 0 || submitAll.isPending}
+        className="rounded-md bg-blue-600 px-2 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+      >
+        {submitAll.isPending ? 'Routing…' : `Route all (${completeCount})`}
+      </button>
+      {submitAll.error && (
+        <p className="text-xs text-red-400">
+          {submitAll.error instanceof ApiError && submitAll.error.status === 409
+            ? 'Floor not prepared.'
+            : `Route failed: ${(submitAll.error as Error).message}`}
+        </p>
+      )}
+
+      <button
+        onClick={() => {
+          reset()
+          clearResults()
+        }}
         className="rounded-md border border-neutral-700 px-2 py-1 text-xs text-neutral-300 hover:bg-neutral-800"
       >
-        Reset selection
+        Reset all
       </button>
     </div>
   )

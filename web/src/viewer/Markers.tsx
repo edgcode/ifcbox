@@ -19,8 +19,14 @@ function Marker(props: {
 }) {
   const { pos, kind, id, label } = props
   const pick = useRouteBuilder((s) => s.pick)
-  const isSource = useRouteBuilder((s) => s.source?.id === id)
-  const isTarget = useRouteBuilder((s) => s.targets.some((t) => t.id === id))
+  const isSource = useRouteBuilder((s) => {
+    const g = s.groups.find((x) => x.id === s.activeId)
+    return g?.source?.id === id
+  })
+  const isTarget = useRouteBuilder((s) => {
+    const g = s.groups.find((x) => x.id === s.activeId)
+    return !!g?.targets.some((t) => t.id === id)
+  })
 
   const selected = isSource || isTarget
   const color = isSource ? SOURCE : isTarget ? TARGET : BASE[kind]

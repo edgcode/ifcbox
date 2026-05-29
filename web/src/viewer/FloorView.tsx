@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useSelection } from '@/state/selection'
 import { useRouteBuilder } from '@/state/routeBuilder'
-import { useActiveRoute } from '@/state/activeRoute'
+import { useRouteResults } from '@/state/routeResults'
 import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
 import { BimShell } from './BimShell'
 import { Markers } from './Markers'
@@ -16,8 +16,9 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
   const closeFloor = useSelection((s) => s.closeFloor)
   const pick = useRouteBuilder((s) => s.pick)
   const reset = useRouteBuilder((s) => s.reset)
-  const route = useActiveRoute((s) => s.result)
-  const clearRoute = useActiveRoute((s) => s.clear)
+  const groups = useRouteBuilder((s) => s.groups)
+  const results = useRouteResults((s) => s.byGroup)
+  const clearResults = useRouteResults((s) => s.clear)
 
   const floor = useQuery({
     queryKey: ['floor', modelId, floorIndex],
@@ -25,11 +26,11 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
   })
   const url = api.geometryUrl(modelId, floorIndex)
 
-  // Clear the route builder + active route when switching floors/models.
+  // Clear the route builder + results when switching floors/models.
   useEffect(() => {
     reset()
-    clearRoute()
-  }, [modelId, floorIndex, reset, clearRoute])
+    clearResults()
+  }, [modelId, floorIndex, reset, clearResults])
 
   return (
     <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
@@ -54,7 +55,9 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
           <directionalLight position={[40, -30, 60]} intensity={1.3} />
           <directionalLight position={[-30, 20, 30]} intensity={0.5} />
           <Suspense fallback={null}>
-            <Bounds fit clip observe margin={1.2}>
+            {/* Fit once when the shell loads (no `observe`, which refits on every
+                re-render and sends the camera flying when a marker is clicked). */}
+            <Bounds fit clip margin={1.2}>
               <group
                 onClick={(e: ThreeEvent<MouseEvent>) => {
                   e.stopPropagation()
@@ -68,20 +71,29 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
               >
                 <BimShell url={url} />
               </group>
-              {floor.data && <Markers floor={floor.data} />}
             </Bounds>
+            {floor.data && <Markers floor={floor.data} />}
           </Suspense>
 
-          <Suspense fallback={null}>
-            {route && <PipeNetwork url={api.meshUrl(route.route_id)} />}
-          </Suspense>
-          {route?.branch_points.map((p, i) => (
-            <mesh key={i} position={p as [number, number, number]}>
-              {/* junction ~1.5x the pipe diameter */}
-              <sphereGeometry args={[(route.diameter_m * 1.5) / 2, 16, 16]} />
-              <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={0.5} />
-            </mesh>
-          ))}
+          {groups.map((g) => {
+            const r = results[g.id]
+            return r ? (
+              <Suspense key={g.id} fallback={null}>
+                <PipeNetwork url={api.meshUrl(r.route_id)} color={g.color} />
+              </Suspense>
+            ) : null
+          })}
+          {groups.map((g) => {
+            const r = results[g.id]
+            if (!r) return null
+            return r.branch_points.map((p, i) => (
+              <mesh key={`${g.id}-${i}`} position={p as [number, number, number]}>
+                {/* junction ~1.5x the pipe diameter */}
+                <sphereGeometry args={[(r.diameter_m * 1.5) / 2, 16, 16]} />
+                <meshStandardMaterial color={g.color} emissive={g.color} emissiveIntensity={0.5} />
+              </mesh>
+            ))
+          })}
 
           <OrbitControls makeDefault enableDamping />
         </Canvas>
