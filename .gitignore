@@ -6,5 +6,4 @@ output/
 data/
 *.ifc
 *.glb
-*.json
 .DS_Store
