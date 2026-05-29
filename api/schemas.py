@@ -81,6 +81,14 @@ class SpaceOut(BaseModel):
     centroid: tuple[float, float, float]   # world coords
 
 
+class GridMeta(BaseModel):
+    origin: tuple[float, float]          # site XY of voxel [0,0] corner
+    resolution: float                    # metres per voxel
+    shape: tuple[int, int]               # (nx, ny)
+    pipe_z: float                        # routing elevation (world Z)
+    site_to_world: list[list[float]]     # 4x4 matrix
+
+
 class FloorDetail(BaseModel):
     model_id: str
     floor_index: int
@@ -88,3 +96,4 @@ class FloorDetail(BaseModel):
     status: str
     terminals: list[TerminalOut] = []
     spaces: list[SpaceOut] = []
+    grid: Optional[GridMeta] = None
