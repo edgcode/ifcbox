@@ -23,7 +23,7 @@ export const useViewer = create<ViewerState>((set) => ({
   clip: false,
   clipHeight: 0,
   colorMode: 'default',
-  showTerminals: true,
+  showTerminals: false,
   showRooms: true,
   showLabels: true,
   setOverlay: (o) => set({ overlay: o }),

@@ -102,12 +102,7 @@ function FloorRow({ modelId, storey }: { modelId: string; storey: Storey }) {
             </button>
           )}
           {status === 'ready' && floor.data && (
-            <>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                {floor.data.terminals.length} terminals · {floor.data.spaces.length} spaces
-              </span>
-              <OpenFloorButton index={storey.index} />
-            </>
+            <OpenFloorButton index={storey.index} />
           )}
         </div>
       </div>

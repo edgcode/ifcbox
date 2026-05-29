@@ -4,6 +4,7 @@ import { api, ApiError } from '@/api/client'
 import { useRouteBuilder, toAnchorIn } from '@/state/routeBuilder'
 import type { AnchorSel } from '@/state/routeBuilder'
 import { useRouteResults } from '@/state/routeResults'
+import { useViewer } from '@/state/viewer'
 import type { FloorDetail, RouteResult } from '@/api/types'
 
 function Seg<T extends string>(props: {
@@ -101,14 +102,17 @@ export function RouteBuilderPanel({
 
   const completeCount = groups.filter((g) => g.source && g.targets.length > 0).length
   const [q, setQ] = useState('')
+  const showTerminals = useViewer((s) => s.showTerminals)
   const items = useMemo<AnchorSel[]>(() => {
     const all: AnchorSel[] = [
-      ...floor.terminals.map((t) => ({ kind: 'terminal' as const, id: t.id, label: t.id })),
+      ...(showTerminals
+        ? floor.terminals.map((t) => ({ kind: 'terminal' as const, id: t.id, label: t.id }))
+        : []),
       ...floor.spaces.map((s) => ({ kind: 'room' as const, id: s.id, label: s.name })),
     ]
     const needle = q.toLowerCase()
     return all.filter((i) => i.label.toLowerCase().includes(needle))
-  }, [floor, q])
+  }, [floor, q, showTerminals])
 
   const activeResult = byGroup[active.id]
   const label = 'text-xs font-medium text-neutral-500 dark:text-neutral-400'
