@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-IFCBox — CHW pipe auto-router CLI (thin client over ifcbox.engine).
+IFCBox — pipe auto-router CLI (thin client over ifcbox.engine).
 
 Usage examples:
   python route.py model.ifc --list-floors
@@ -165,7 +165,7 @@ def cmd_route(args):
         world_meshes = [st.world_mesh(m) for m in geom.meshes]
         wps = [np.array(w) for w in result.segments[0].waypoints]
         show(world_meshes, pipe_mesh, wps,
-             title=f"IFCBox — {storey.name} — CHW route ({result.total_length:.1f}m)")
+             title=f"IFCBox — {storey.name} — pipe route ({result.total_length:.1f}m)")
 
 
 def _render_debug(args, model, storey, prep, geom, result, output_dir):
@@ -191,7 +191,7 @@ def _render_debug(args, model, storey, prep, geom, result, output_dir):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="IFCBox CHW pipe auto-router",
+        description="IFCBox pipe auto-router",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

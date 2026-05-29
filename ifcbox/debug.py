@@ -547,94 +547,104 @@ def render_wall_typename_debug(
     logger.info("Saved wall type-name debug: %s", output_path)
 
 
-def render_wall_properties_debug(
+def render_wall_firerating_debug(
     model,
     storey,
     site_xform,
     meta: VoxelMeta,
-    output_path: str = "output/debug_wall_properties.png",
+    output_path: str = "output/debug_wall_firerating.png",
     waypoints: list | None = None,
 ) -> None:
-    """
-    Debug PNG (2-panel): left = FireRating (categorical), right = TotalThickness (continuous).
-    Both sourced from Pset_WallCommon.
-    """
+    """Single floor plan: walls coloured by Pset_WallCommon.FireRating (categorical)."""
     import matplotlib.cm as mcm
     import matplotlib.patches as mpatches
+    import matplotlib.pyplot as plt
+
+    nx, ny = meta.shape
+    rows = [
+        (_wall_fire_rating(el), mask)
+        for el, mask in _iter_wall_rasters(model, storey, site_xform, meta)
+    ]
+    ratings = sorted(set(r for r, _ in rows))
+    cmap = mcm.get_cmap("tab10")
+    colour = {r: cmap(i % 10 / 10) for i, r in enumerate(ratings)}
+
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax.set_facecolor(COLOUR_EXTERIOR)
+    fig.patch.set_facecolor("#ffffff")
+    for fr, mask in rows:
+        rgba = np.zeros((ny, nx, 4), dtype=np.float32)
+        rv, gv, bv, _ = colour[fr]
+        rgba[mask.T, :] = [rv, gv, bv, 1.0]
+        ax.imshow(rgba, origin="lower", interpolation="nearest", extent=[0, nx, 0, ny])
+
+    _overlay_route(ax, waypoints, meta)
+    ax.legend(
+        handles=[mpatches.Patch(color=colour[r], label=("— (none)" if r == "—" else r))
+                 for r in ratings],
+        loc="upper right", fontsize=7, framealpha=0.92,
+    )
+    ax.set_title(
+        f"IFCBox — wall fire rating — {storey.name}  |  {nx}×{ny} @ {meta.resolution*1000:.0f}mm",
+        fontsize=11,
+    )
+    ax.set_xlim(0, nx); ax.set_ylim(0, ny); ax.set_aspect("equal")
+
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=180, bbox_inches="tight")
+    plt.close(fig)
+    logger.info("Saved wall fire-rating debug: %s", output_path)
+
+
+def render_wall_thickness_debug(
+    model,
+    storey,
+    site_xform,
+    meta: VoxelMeta,
+    output_path: str = "output/debug_wall_thickness.png",
+    waypoints: list | None = None,
+) -> None:
+    """Single floor plan: walls coloured by thickness (continuous, plasma colorbar in mm)."""
+    import matplotlib.cm as mcm
     import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
 
     nx, ny = meta.shape
-
-    # One pass over walls — collect fire rating, thickness, mask
-    rows: list[tuple[str, float | None, np.ndarray]] = [
-        (_wall_fire_rating(el), _wall_total_thickness(el), mask)
+    rows = [
+        (_wall_total_thickness(el), mask)
         for el, mask in _iter_wall_rasters(model, storey, site_xform, meta)
     ]
+    vals_mm = [th * 1000 for th, _ in rows if th is not None]
+    cmap = mcm.get_cmap("plasma")
+    norm = Normalize(vmin=min(vals_mm), vmax=max(vals_mm)) if vals_mm else Normalize(0, 1)
 
-    fig, axes = plt.subplots(1, 2, figsize=(30, 12))
+    fig, ax = plt.subplots(figsize=(20, 10))
+    ax.set_facecolor(COLOUR_EXTERIOR)
     fig.patch.set_facecolor("#ffffff")
-
-    # ── Left: fire rating ─────────────────────────────────────────────────────
-    ax_fr = axes[0]
-    ax_fr.set_facecolor(COLOUR_EXTERIOR)
-
-    unique_ratings = sorted(set(fr for fr, _, _ in rows))
-    cmap_cat = mcm.get_cmap("tab10")
-    fr_colour = {r: cmap_cat(i % 10 / 10) for i, r in enumerate(unique_ratings)}
-
-    for fr, _, mask in rows:
-        rgba = np.zeros((ny, nx, 4), dtype=np.float32)
-        rv, gv, bv, _ = fr_colour[fr]
-        rgba[mask.T, :] = [rv, gv, bv, 1.0]
-        ax_fr.imshow(rgba, origin="lower", interpolation="nearest", extent=[0, nx, 0, ny])
-
-    _overlay_route(ax_fr, waypoints, meta)
-    ax_fr.legend(
-        handles=[mpatches.Patch(color=fr_colour[r], label=r) for r in unique_ratings],
-        loc="upper right", fontsize=7, framealpha=0.92,
-    )
-    ax_fr.set_title(f"Pset_WallCommon.FireRating — {storey.name}", fontsize=10)
-    ax_fr.set_xlim(0, nx); ax_fr.set_ylim(0, ny); ax_fr.set_aspect("equal")
-
-    # ── Right: total thickness ────────────────────────────────────────────────
-    ax_th = axes[1]
-    ax_th.set_facecolor(COLOUR_EXTERIOR)
-
-    thickness_vals = [th for _, th, _ in rows if th is not None]
-    cmap_cont = mcm.get_cmap("plasma")
-    if thickness_vals:
-        norm = Normalize(vmin=min(thickness_vals), vmax=max(thickness_vals))
-    else:
-        norm = Normalize(vmin=0, vmax=1)
-
-    for _, th, mask in rows:
+    for th, mask in rows:
         rgba = np.zeros((ny, nx, 4), dtype=np.float32)
         if th is not None:
-            rv, gv, bv, _ = cmap_cont(norm(th))
+            rv, gv, bv, _ = cmap(norm(th * 1000))
         else:
             rv, gv, bv = 0.45, 0.45, 0.45   # grey = no data
         rgba[mask.T, :] = [rv, gv, bv, 1.0]
-        ax_th.imshow(rgba, origin="lower", interpolation="nearest", extent=[0, nx, 0, ny])
+        ax.imshow(rgba, origin="lower", interpolation="nearest", extent=[0, nx, 0, ny])
 
-    _overlay_route(ax_th, waypoints, meta)
-
-    sm = plt.cm.ScalarMappable(cmap=cmap_cont, norm=norm)
+    _overlay_route(ax, waypoints, meta)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
-    cb = fig.colorbar(sm, ax=ax_th, fraction=0.03, pad=0.02)
-    cb.set_label("TotalThickness (m)", fontsize=9)
-    if not thickness_vals:
-        ax_th.text(0.5, 0.5, "No TotalThickness data in model",
-                   transform=ax_th.transAxes, ha="center", va="center",
-                   fontsize=12, color="white")
-    ax_th.set_title(f"Pset_WallCommon.TotalThickness — {storey.name}", fontsize=10)
-    ax_th.set_xlim(0, nx); ax_th.set_ylim(0, ny); ax_th.set_aspect("equal")
+    cb = fig.colorbar(sm, ax=ax, fraction=0.025, pad=0.02)
+    cb.set_label("Wall thickness (mm)", fontsize=9)
+    ax.set_title(
+        f"IFCBox — wall thickness — {storey.name}  |  {nx}×{ny} @ {meta.resolution*1000:.0f}mm",
+        fontsize=11,
+    )
+    ax.set_xlim(0, nx); ax.set_ylim(0, ny); ax.set_aspect("equal")
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout()
     fig.savefig(output_path, dpi=180, bbox_inches="tight")
     plt.close(fig)
-    logger.info("Saved wall properties debug: %s", output_path)
+    logger.info("Saved wall thickness debug: %s", output_path)
 
 
 def _draw_room_labels(ax, model, meta, storey, site_xform):

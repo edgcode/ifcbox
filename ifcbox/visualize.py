@@ -8,7 +8,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# CHW pipe colour (blue)
+# Pipe colour (blue)
 PIPE_COLOUR = "#0077CC"
 BUILDING_COLOUR = "lightgrey"
 TERMINAL_COLOUR = "#FF6600"

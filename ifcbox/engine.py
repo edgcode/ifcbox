@@ -195,7 +195,7 @@ class RouteParams:
     diameter: float = 0.1
     corridor_weight: float = 0.25   # multiplier on free corridor voxels (<1 = preferred)
     strict_doors: bool = False
-    discipline: str = "CHW"
+    discipline: str = "generic"
 
 
 @dataclass
@@ -213,7 +213,7 @@ class RouteResult:
     branch_points: list = field(default_factory=list)   # [[x,y,z], ...] world coords
     total_length: float = 0.0
     diameter: float = 0.1
-    discipline: str = "CHW"
+    discipline: str = "generic"
     unreachable_targets: list = field(default_factory=list)
 
     def to_dict(self) -> dict:

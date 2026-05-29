@@ -33,7 +33,7 @@ class RouteParamsIn(BaseModel):
     diameter: float = 0.1
     corridor_weight: float = 0.25
     strict_doors: bool = False
-    discipline: str = "CHW"
+    discipline: str = "generic"
 
     def to_params(self) -> RouteParams:
         return RouteParams(**self.model_dump())

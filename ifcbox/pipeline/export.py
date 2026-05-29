@@ -15,7 +15,7 @@ def export_json(
     waypoints: list[np.ndarray],
     path: str | Path,
     diameter: float = 0.1,
-    discipline: str = "CHW",
+    discipline: str = "generic",
     storey_name: str = "",
 ) -> None:
     """Write route waypoints as JSON."""

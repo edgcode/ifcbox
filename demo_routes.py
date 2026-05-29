@@ -492,11 +492,17 @@ def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info("Generating wall property debug PNGs...")
-    from ifcbox.debug import render_wall_typename_debug, render_wall_properties_debug
+    from ifcbox.debug import (
+        render_wall_firerating_debug,
+        render_wall_thickness_debug,
+        render_wall_typename_debug,
+    )
     render_wall_typename_debug(model, storey, st, meta,
                                str(output_dir / "debug_wall_typenames.png"))
-    render_wall_properties_debug(model, storey, st, meta,
-                                 str(output_dir / "debug_wall_properties.png"))
+    render_wall_firerating_debug(model, storey, st, meta,
+                                 str(output_dir / "debug_wall_firerating.png"))
+    render_wall_thickness_debug(model, storey, st, meta,
+                                str(output_dir / "debug_wall_thickness.png"))
 
     logger.info("Rendering obstacle debug scene (no route)...")
     render_debug_scene(
@@ -571,7 +577,7 @@ def run_all_routes(ifc_path, floor_idx, use_strict_doors=True, no_view=False):
         world_meshes = [st.transform_mesh(m) for m in floor_geom.meshes]
         show(
             world_meshes, merged_pipe, all_waypoints_world,
-            title=f"IFCBox — {storey.name} — All CHW routes",
+            title=f"IFCBox — {storey.name} — All routes",
         )
 
 
@@ -635,7 +641,7 @@ def _render_combined_scene(occupancy, meta, model, storey, site_xform,
         ax.plot(vxs[0], vys[0], "s", color=COLOUR_ENDPOINT, markersize=9,
                 markeredgecolor="white", zorder=13)
 
-    route_handles = [mpatches.Patch(color=COLOUR_ROUTE, label="CHW route")]
+    route_handles = [mpatches.Patch(color=COLOUR_ROUTE, label="Pipe route")]
 
     legend_base = [
         mpatches.Patch(color=COLOUR_CORRIDOR,  label="Corridor / Flur"),
