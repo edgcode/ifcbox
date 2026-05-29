@@ -1,0 +1,27 @@
+# Render blueprint. Secrets (sync:false) are set in the Render dashboard.
+# Note: floor prep tessellates a large IFC — the free 512MB plan may OOM;
+# bump `plan` to standard (2GB) if prep is killed.
+services:
+  - type: web
+    name: ifcbox
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: IFCBOX_STORAGE
+        value: cloud
+      - key: IFCBOX_CACHE_DIR
+        value: /tmp/ifcbox
+      - key: R2_ENDPOINT_URL
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: IFCBOX_APP_TOKEN
+        sync: false

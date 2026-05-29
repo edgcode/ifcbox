@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 output/
 data/
+api/static/
 .env
 .env.*
 *.ifc

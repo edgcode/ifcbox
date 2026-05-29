@@ -1,0 +1,5 @@
+# Local dev / CLI extras on top of the runtime requirements.
+-r requirements.txt
+
+pyvista>=0.42        # PyVista 3D viewer for the CLI (route.py without --no-view)
+pytest>=8.0

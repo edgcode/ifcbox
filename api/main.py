@@ -6,9 +6,11 @@ Run: uvicorn api.main:app --reload
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from api.auth import require_token
 from api.deps import API_PREFIX
@@ -41,3 +43,11 @@ app.include_router(routes.router, prefix=API_PREFIX, dependencies=_guard)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+# Serve the built frontend (api/static, populated in the Docker image) at the
+# root, so prod is single-origin. Absent in local dev (frontend runs via Vite).
+# Mounted last so it doesn't shadow /api or /health.
+_static = Path(__file__).parent / "static"
+if _static.is_dir():
+    app.mount("/", StaticFiles(directory=_static, html=True), name="static")

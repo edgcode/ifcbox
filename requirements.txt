@@ -1,22 +1,18 @@
+# Runtime dependencies (engine + API + cloud). Dev/CLI extras: requirements-dev.txt
 ifcopenshell>=0.7
 trimesh[easy]>=4.0
 numpy>=1.24
 scipy>=1.10
-pyvista>=0.42
-networkx>=3.0
-scikit-image>=0.21
+matplotlib>=3.7          # overlay / room rasters + debug PNGs (Agg)
 
-# Phase 2 — web backend
+# web backend
 fastapi>=0.110
 uvicorn[standard]>=0.29
 python-multipart>=0.0.9
 websockets>=12.0
 
-# Phase 3 — cloud storage (R2 + Postgres)
+# cloud storage (R2 + Postgres)
 boto3>=1.34
 psycopg[binary]>=3.1
 psycopg-pool>=3.2
 python-dotenv>=1.0
-
-# dev / test
-pytest>=8.0
