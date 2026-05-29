@@ -1,6 +1,10 @@
-# IFCBox — Full Technical Specification & Execution Plan
+# IFCBox — Phase 1 Spec: Backend IFC Parsing & Routing Pipeline
 
 Generated from grilling session 2026-05-28. Decisions are recorded with rationale.
+
+> **Scope of this document:** the **Phase 1 Python routing pipeline** (IFC → voxel grid → SDF → A* → pipe mesh). This is the spatial-intelligence core. The **web platform** (engine refactor + FastAPI backend) is specified separately in [spec-api.md](spec-api.md); the **frontend** in [spec-frontend.md](spec-frontend.md). Start at the [plans index](README.md).
+>
+> The Phase 2/3 sections below (§4–5) are the *original outline* of the web work. The backend API is now specified in full in [spec-api.md](spec-api.md), which supersedes §4 where they differ.
 
 ---
 
@@ -243,6 +247,8 @@ Build and test each module in isolation before wiring the CLI:
 ---
 
 ## 4. Phase 2 — Web Platform
+
+> **Superseded:** this section is the original sketch. The detailed, current plan for the engine refactor + FastAPI backend is [spec-api.md](spec-api.md). Where the two differ, spec-api.md wins.
 
 **Prerequisite:** Phase 1 Python pipeline is working and tested on `model.ifc`.
 
