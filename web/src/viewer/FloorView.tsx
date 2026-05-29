@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useMemo } from 'react'
 import { Canvas } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
-import { Bounds, Loader, OrbitControls } from '@react-three/drei'
+import { Bounds, Loader, OrbitControls, useProgress } from '@react-three/drei'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useSelection } from '@/state/selection'
@@ -20,6 +20,30 @@ import { OverlayPlane } from './OverlayPlane'
 import { PipeNetwork } from './PipeNetwork'
 import { PointMarkers } from './PointMarkers'
 import { buildScale } from './colors'
+
+function ViewerLoading({ floorName, floorLoading }: { floorName?: string; floorLoading: boolean }) {
+  const { progress, active } = useProgress()
+  const show = floorLoading || active
+  if (!show) return null
+  const label = floorLoading
+    ? 'Fetching floor data…'
+    : `Loading 3D model — ${Math.round(progress)}%`
+  return (
+    <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-white/50 backdrop-blur-sm dark:bg-neutral-900/50">
+      <div className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white px-5 py-4 shadow-xl dark:border-neutral-700 dark:bg-neutral-800">
+        <svg className="h-7 w-7 shrink-0 animate-spin text-blue-600 dark:text-blue-400"
+             viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+          <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+        </svg>
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{floorName ?? 'Floor'}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">{label}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex: number }) {
   const closeFloor = useSelection((s) => s.closeFloor)
@@ -149,6 +173,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
           <OrbitControls makeDefault enableDamping />
         </Canvas>
         <Loader />
+        <ViewerLoading floorName={floor.data?.name} floorLoading={floor.isLoading} />
         <ViewerControls grid={grid} />
         <Legend scale={scale} walls={walls.data} />
         {floor.data && (
