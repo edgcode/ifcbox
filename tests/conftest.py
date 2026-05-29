@@ -21,7 +21,7 @@ os.environ.setdefault("IFCBOX_DATA_DIR", tempfile.mkdtemp(prefix="ifcbox_test_")
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MODEL_IFC = REPO_ROOT / "ifcbox" / "model.ifc"
-TEST_FLOOR = 2   # OKFF OG1 — residential floor with apartments (raw-deck levels filtered out of list_storeys)
+TEST_FLOOR = 1   # OKFF OG1 — residential floor with apartments (raw-deck levels filtered out of list_storeys)
 
 # Pre-refactor reference route (Flur:1375428 → Bad:1375434), point→point.
 BASELINE_LENGTH = 4.5

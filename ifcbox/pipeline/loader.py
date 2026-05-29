@@ -10,10 +10,13 @@ from typing import Optional
 
 import numpy as np
 
-# Raw-deck levels (German: Oberkante/Unterkante Rohdecke — top/bottom of the
-# structural slab). These aren't finished floors and aren't routable; we only
-# want OKFF (Oberkante Fertigfußboden) / generic finished levels.
-_RAW_DECK_RE = re.compile(r"^\s*(OKRD|UKRD)\b", re.IGNORECASE)
+# Storeys that aren't routable finished floors:
+#   - OKRD / UKRD — raw-deck levels (Oberkante/Unterkante Rohdecke, top/
+#     bottom of the structural slab).
+#   - Attika — parapet / roof crown (typically "OK Attika"), not a floor.
+#   - zeHGW — a non-floor marker present in our test IFC.
+# We want finished floors (e.g. OKFF, Oberkante Fertigfußboden) only.
+_NON_ROUTABLE_STOREY_RE = re.compile(r"\b(OKRD|UKRD|Attika|zeHGW)\b", re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
 

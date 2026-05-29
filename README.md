@@ -150,7 +150,7 @@ Quick local taste (CLI, no web):
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 python route.py your-model.ifc --list-floors
-python route.py your-model.ifc --floor 2 --start-xyz X,Y,Z --end-xyz X,Y,Z --debug
+python route.py your-model.ifc --floor 1 --start-xyz X,Y,Z --end-xyz X,Y,Z --debug
 ```
 
 ---
