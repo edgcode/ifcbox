@@ -2,6 +2,7 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import { useRouteBuilder } from '@/state/routeBuilder'
 import type { PickKind } from '@/state/routeBuilder'
+import { useViewer } from '@/state/viewer'
 import type { FloorDetail } from '@/api/types'
 
 const BASE: Record<'terminal' | 'room', string> = {
@@ -16,8 +17,9 @@ function Marker(props: {
   kind: Exclude<PickKind, 'point'>
   id: string
   label: string
+  showLabel?: boolean
 }) {
-  const { pos, kind, id, label } = props
+  const { pos, kind, id, label, showLabel } = props
   const pick = useRouteBuilder((s) => s.pick)
   const isSource = useRouteBuilder((s) => {
     const g = s.groups.find((x) => x.id === s.activeId)
@@ -53,7 +55,7 @@ function Marker(props: {
         emissive={color}
         emissiveIntensity={selected ? 0.6 : 0.15}
       />
-      {kind === 'room' && (
+      {kind === 'room' && showLabel && (
         <Html position={[0, 0, radius + 0.3]} center distanceFactor={14} zIndexRange={[10, 0]}>
           <div className="pointer-events-none whitespace-nowrap rounded bg-black/60 px-1 text-[10px] leading-tight text-white">
             {label}
@@ -65,14 +67,19 @@ function Marker(props: {
 }
 
 export function Markers({ floor }: { floor: FloorDetail }) {
+  const showTerminals = useViewer((s) => s.showTerminals)
+  const showRooms = useViewer((s) => s.showRooms)
+  const showLabels = useViewer((s) => s.showLabels)
   return (
     <>
-      {floor.terminals.map((t) => (
-        <Marker key={t.id} pos={t.xyz} kind="terminal" id={t.id} label={t.id} />
-      ))}
-      {floor.spaces.map((s) => (
-        <Marker key={s.id} pos={s.centroid} kind="room" id={s.id} label={s.name} />
-      ))}
+      {showTerminals &&
+        floor.terminals.map((t) => (
+          <Marker key={t.id} pos={t.xyz} kind="terminal" id={t.id} label={t.id} />
+        ))}
+      {showRooms &&
+        floor.spaces.map((s) => (
+          <Marker key={s.id} pos={s.centroid} kind="room" id={s.id} label={s.name} showLabel={showLabels} />
+        ))}
     </>
   )
 }

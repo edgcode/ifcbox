@@ -58,6 +58,8 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
             {floor.data.terminals.length} terminals · {floor.data.spaces.length} spaces
           </span>
         )}
+        {floor.isLoading && <span className="text-xs text-neutral-500">loading…</span>}
+        {floor.error && <span className="text-xs text-red-400">failed to load floor</span>}
       </header>
 
       <div className="relative flex-1">

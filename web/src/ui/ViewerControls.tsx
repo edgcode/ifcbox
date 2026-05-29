@@ -15,6 +15,10 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
   const setClip = useViewer((s) => s.setClip)
   const clipHeight = useViewer((s) => s.clipHeight)
   const setClipHeight = useViewer((s) => s.setClipHeight)
+  const showTerminals = useViewer((s) => s.showTerminals)
+  const showRooms = useViewer((s) => s.showRooms)
+  const showLabels = useViewer((s) => s.showLabels)
+  const toggle = useViewer((s) => s.toggle)
 
   const pz = grid?.pipe_z ?? 0
   const min = pz - 3
@@ -55,6 +59,22 @@ export function ViewerControls({ grid }: { grid?: GridMeta | null }) {
             className="w-full"
           />
         )}
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium text-neutral-400">Show</p>
+        <label className="flex items-center gap-2 text-xs text-neutral-300">
+          <input type="checkbox" checked={showTerminals} onChange={() => toggle('showTerminals')} />
+          Terminals
+        </label>
+        <label className="flex items-center gap-2 text-xs text-neutral-300">
+          <input type="checkbox" checked={showRooms} onChange={() => toggle('showRooms')} />
+          Rooms
+        </label>
+        <label className="flex items-center gap-2 text-xs text-neutral-300">
+          <input type="checkbox" checked={showLabels} onChange={() => toggle('showLabels')} />
+          Room labels
+        </label>
       </div>
     </div>
   )
