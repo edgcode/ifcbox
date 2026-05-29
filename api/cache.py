@@ -6,7 +6,8 @@ import threading
 from collections import OrderedDict
 
 from ifcbox.engine import PreparedFloor
-from api.store import files
+from api.storage import blobs
+from api.storage import keys
 
 _MAX = 4
 _mem: "OrderedDict[tuple[str, int], PreparedFloor]" = OrderedDict()
@@ -28,8 +29,10 @@ def get_prepared(model_id: str, floor: int) -> PreparedFloor | None:
             _mem.move_to_end(key)
             return _mem[key]
 
-    d = files.floor_dir(model_id, floor)
-    if not (d / "prepared.npz").exists():
+    if not blobs.exists(keys.floor_prepared(model_id, floor)):
+        return None
+    d = blobs.read_dir(keys.floor_dir(model_id, floor))
+    if d is None:
         return None
     prep = PreparedFloor.load(d)
     with _lock:

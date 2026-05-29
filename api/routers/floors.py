@@ -12,23 +12,24 @@ from ifcbox.overlays import clearance_png, occupancy_png
 from ifcbox.rooms import ROOM_CLASSES
 from api import cache, tasks
 from api.schemas import FloorDetail, GridMeta, SpaceOut, TerminalOut
-from api.store import db, files
+from api.storage import blobs, meta
+from api.storage import keys
 
 router = APIRouter(tags=["floors"])
 
 
 def _require_floor(model_id: str, n: int) -> dict:
-    row = db.get_model(model_id)
+    row = meta.get_model(model_id)
     if row is None:
         raise HTTPException(404, "model not found")
     if n < 0 or n >= row["storey_count"]:
         raise HTTPException(404, f"floor {n} out of range (0–{row['storey_count'] - 1})")
-    meta = json.loads(files.model_meta(model_id).read_text())
-    return meta["storeys"][n]
+    model_meta = json.loads(blobs.read_text(keys.model_meta(model_id)))
+    return model_meta["storeys"][n]
 
 
 def _floor_status(model_id: str, n: int) -> str:
-    row = db.get_floor_prep(model_id, n)
+    row = meta.get_floor_prep(model_id, n)
     return row["status"] if row else "unprepared"
 
 
@@ -79,8 +80,8 @@ async def prepare_floor_endpoint(model_id: str, n: int):
 @router.get("/models/{model_id}/floors/{n}/geometry")
 async def floor_geometry(model_id: str, n: int):
     _require_floor(model_id, n)
-    shell = files.floor_shell(model_id, n)
-    if _floor_status(model_id, n) != "ready" or not shell.exists():
+    shell = blobs.read_path(keys.floor_shell(model_id, n))
+    if _floor_status(model_id, n) != "ready" or shell is None:
         raise HTTPException(409, {"detail": "floor not prepared",
                                   "prepare_url": f"/api/v1/models/{model_id}/floors/{n}/prepare"})
     return FileResponse(shell, media_type="model/gltf-binary", filename="shell.glb")
@@ -99,8 +100,8 @@ async def floor_overlay(model_id: str, n: int, kind: str):
 
     # 'rooms' is rasterised at prepare time (needs space geometry) and served as a file.
     if kind == "rooms":
-        path = files.floor_rooms(model_id, n)
-        if _floor_status(model_id, n) != "ready" or not path.exists():
+        path = blobs.read_path(keys.floor_rooms(model_id, n))
+        if _floor_status(model_id, n) != "ready" or path is None:
             raise HTTPException(409, {"detail": "floor not prepared",
                                       "prepare_url": f"/api/v1/models/{model_id}/floors/{n}/prepare"})
         return FileResponse(path, media_type="image/png")
@@ -117,8 +118,8 @@ async def floor_overlay(model_id: str, n: int, kind: str):
 @router.get("/models/{model_id}/floors/{n}/walls")
 async def floor_walls(model_id: str, n: int):
     _require_floor(model_id, n)
-    path = files.floor_walls(model_id, n)
-    if _floor_status(model_id, n) != "ready" or not path.exists():
+    path = blobs.read_path(keys.floor_walls(model_id, n))
+    if _floor_status(model_id, n) != "ready" or path is None:
         raise HTTPException(409, {"detail": "floor not prepared",
                                   "prepare_url": f"/api/v1/models/{model_id}/floors/{n}/prepare"})
     return FileResponse(path, media_type="application/json")
@@ -129,7 +130,7 @@ async def prepare_ws(websocket: WebSocket, model_id: str, n: int):
     await websocket.accept()
     try:
         while True:
-            row = db.get_floor_prep(model_id, n)
+            row = meta.get_floor_prep(model_id, n)
             status = row["status"] if row else "unprepared"
             await websocket.send_json({
                 "status": status,

@@ -12,12 +12,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.deps import API_PREFIX
 from api.routers import floors, models, routes
-from api.store import db
+from api.storage import meta
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db.init_db()
+    meta.init()
     yield
 
 
