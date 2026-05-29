@@ -7,9 +7,13 @@ import { api } from '@/api/client'
 import { useSelection } from '@/state/selection'
 import { useRouteBuilder } from '@/state/routeBuilder'
 import { useRouteResults } from '@/state/routeResults'
+import { useViewer } from '@/state/viewer'
 import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
+import { ViewerControls } from '@/ui/ViewerControls'
 import { BimShell } from './BimShell'
+import { Clipping } from './Clipping'
 import { Markers } from './Markers'
+import { OverlayPlane } from './OverlayPlane'
 import { PipeNetwork } from './PipeNetwork'
 
 export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex: number }) {
@@ -19,18 +23,28 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
   const groups = useRouteBuilder((s) => s.groups)
   const results = useRouteResults((s) => s.byGroup)
   const clearResults = useRouteResults((s) => s.clear)
+  const overlay = useViewer((s) => s.overlay)
+  const clip = useViewer((s) => s.clip)
+  const clipHeight = useViewer((s) => s.clipHeight)
+  const setClipHeight = useViewer((s) => s.setClipHeight)
 
   const floor = useQuery({
     queryKey: ['floor', modelId, floorIndex],
     queryFn: () => api.floorDetail(modelId, floorIndex),
   })
   const url = api.geometryUrl(modelId, floorIndex)
+  const grid = floor.data?.grid
 
   // Clear the route builder + results when switching floors/models.
   useEffect(() => {
     reset()
     clearResults()
   }, [modelId, floorIndex, reset, clearResults])
+
+  // Initialise the clip height just above the routing elevation once known.
+  useEffect(() => {
+    if (grid) setClipHeight(grid.pipe_z + 1)
+  }, [grid, setClipHeight])
 
   return (
     <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
@@ -54,6 +68,18 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
           <ambientLight intensity={0.7} />
           <directionalLight position={[40, -30, 60]} intensity={1.3} />
           <directionalLight position={[-30, 20, 30]} intensity={0.5} />
+          <Clipping enabled={clip} height={clipHeight} />
+
+          {overlay !== 'none' && grid && (
+            <Suspense fallback={null}>
+              <OverlayPlane
+                key={overlay}
+                grid={grid}
+                url={api.overlayUrl(modelId, floorIndex, overlay)}
+                crisp={overlay === 'occupancy'}
+              />
+            </Suspense>
+          )}
           <Suspense fallback={null}>
             {/* Fit once when the shell loads (no `observe`, which refits on every
                 re-render and sends the camera flying when a marker is clicked). */}
@@ -98,6 +124,7 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
           <OrbitControls makeDefault enableDamping />
         </Canvas>
         <Loader />
+        <ViewerControls grid={grid} />
         {floor.data && (
           <RouteBuilderPanel modelId={modelId} floorIndex={floorIndex} floor={floor.data} />
         )}

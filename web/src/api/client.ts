@@ -61,6 +61,8 @@ export const api = {
   prepareFloor: (id: string, n: number) =>
     req<{ status: string }>(`/models/${id}/floors/${n}/prepare`, { method: 'POST' }),
   geometryUrl: (id: string, n: number) => `/api/v1/models/${id}/floors/${n}/geometry`,
+  overlayUrl: (id: string, n: number, kind: 'occupancy' | 'clearance') =>
+    `/api/v1/models/${id}/floors/${n}/overlays/${kind}`,
 
   submitRoute: (id: string, n: number, body: RouteRequest) =>
     req<RouteResult>(`/models/${id}/floors/${n}/routes`, {

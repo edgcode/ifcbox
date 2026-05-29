@@ -36,6 +36,14 @@ export interface Space {
   centroid: [number, number, number]
 }
 
+export interface GridMeta {
+  origin: [number, number]
+  resolution: number
+  shape: [number, number]
+  pipe_z: number
+  site_to_world: number[][]
+}
+
 export interface FloorDetail {
   model_id: string
   floor_index: number
@@ -43,6 +51,7 @@ export interface FloorDetail {
   status: FloorStatus
   terminals: Terminal[]
   spaces: Space[]
+  grid?: GridMeta | null
 }
 
 export type AnchorType = 'point' | 'terminal' | 'room'
