@@ -99,6 +99,16 @@ async def floor_overlay(model_id: str, n: int, kind: str):
     return Response(content=png, media_type="image/png")
 
 
+@router.get("/models/{model_id}/floors/{n}/walls")
+async def floor_walls(model_id: str, n: int):
+    _require_floor(model_id, n)
+    path = files.floor_walls(model_id, n)
+    if _floor_status(model_id, n) != "ready" or not path.exists():
+        raise HTTPException(409, {"detail": "floor not prepared",
+                                  "prepare_url": f"/api/v1/models/{model_id}/floors/{n}/prepare"})
+    return FileResponse(path, media_type="application/json")
+
+
 @router.websocket("/models/{model_id}/floors/{n}/prepare/ws")
 async def prepare_ws(websocket: WebSocket, model_id: str, n: int):
     await websocket.accept()

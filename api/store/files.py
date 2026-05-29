@@ -32,6 +32,10 @@ def floor_shell(model_id: str, n: int) -> Path:
     return floor_dir(model_id, n) / "shell.glb"
 
 
+def floor_walls(model_id: str, n: int) -> Path:
+    return floor_dir(model_id, n) / "walls.json"
+
+
 # ── routes ──────────────────────────────────────────────────────────────────
 def route_dir(route_id: str) -> Path:
     return DATA_DIR / "routes" / route_id

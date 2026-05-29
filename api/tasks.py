@@ -45,8 +45,8 @@ def _prepare_worker(model_id: str, floor: int, resolution: float) -> None:
 
         db.set_floor_status(model_id, floor, "preparing", stage="shell_glb",
                             pct=85, resolution=resolution)
-        export_floor_shell(geom.meshes, geom.site_transform,
-                           files.floor_shell(model_id, floor))
+        export_floor_shell(geom, files.floor_shell(model_id, floor),
+                           files.floor_walls(model_id, floor))
 
         db.set_floor_status(model_id, floor, "ready", stage="done", pct=100,
                             resolution=resolution)

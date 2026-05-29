@@ -134,6 +134,7 @@ class FloorGeometry:
     storey: StoreyInfo
     meshes: list            # list[trimesh.Trimesh] — in site-aligned coords
     mesh_types: list        # list[str] — wall type per mesh (WALL_TYPE_*)
+    elements: list          # list[dict] per mesh: id, ifc_type, thickness_m, wall_type, wall_type_name, fire_rating
     terminals: dict         # {ifc_id: np.ndarray([x, y, z])} — in site-aligned coords
     spaces: dict            # {global_id: {"name": str, "centroid": [x,y,z]}} — site-aligned
     bounds_min: np.ndarray  # [x, y] metres, site-aligned
@@ -217,8 +218,11 @@ def extract_floor_geometry(model, storey: StoreyInfo) -> FloorGeometry:
     z_lo_accept = pipe_z - 0.5
     z_hi_accept = pipe_z + 0.5
 
+    from ifcbox.wall_attrs import wall_fire_rating, wall_type_name
+
     meshes = []
     mesh_types = []
+    elements = []
     failed = 0
 
     # Wall types get thickness-based classification; non-wall obstacles are external
@@ -239,11 +243,19 @@ def extract_floor_geometry(model, storey: StoreyInfo) -> FloorGeometry:
                     continue
                 site_mesh = site_xform.transform_mesh(mesh)
                 meshes.append(site_mesh)
-                if ifc_type in wall_ifc_types:
-                    mesh_types.append(classify_wall_thickness(site_mesh))
-                else:
-                    # Columns, slabs, stairs — treat as structural
-                    mesh_types.append(WALL_TYPE_EXTERNAL)
+                is_wall = ifc_type in wall_ifc_types
+                wtype = classify_wall_thickness(site_mesh) if is_wall else WALL_TYPE_EXTERNAL
+                mesh_types.append(wtype)
+                dx = float(site_mesh.bounds[1][0] - site_mesh.bounds[0][0])
+                dy = float(site_mesh.bounds[1][1] - site_mesh.bounds[0][1])
+                elements.append({
+                    "id": element.GlobalId,
+                    "ifc_type": ifc_type,
+                    "thickness_m": round(min(dx, dy), 4),
+                    "wall_type": wtype,
+                    "wall_type_name": wall_type_name(element) if is_wall else "—",
+                    "fire_rating": wall_fire_rating(element) if is_wall else "—",
+                })
             except Exception as e:
                 failed += 1
                 logger.debug("Mesh extraction failed for %s #%d: %s", ifc_type, element.id(), e)
@@ -274,6 +286,7 @@ def extract_floor_geometry(model, storey: StoreyInfo) -> FloorGeometry:
         storey=storey,
         meshes=meshes,
         mesh_types=mesh_types,
+        elements=elements,
         terminals=terminals,
         spaces=spaces,
         bounds_min=bounds_min,
