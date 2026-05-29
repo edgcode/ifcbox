@@ -6,14 +6,18 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from '@/api/client'
 import { useSelection } from '@/state/selection'
 import { useRouteBuilder } from '@/state/routeBuilder'
+import { useActiveRoute } from '@/state/activeRoute'
 import { RouteBuilderPanel } from '@/ui/RouteBuilderPanel'
 import { BimShell } from './BimShell'
 import { Markers } from './Markers'
+import { PipeNetwork } from './PipeNetwork'
 
 export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex: number }) {
   const closeFloor = useSelection((s) => s.closeFloor)
   const pick = useRouteBuilder((s) => s.pick)
   const reset = useRouteBuilder((s) => s.reset)
+  const route = useActiveRoute((s) => s.result)
+  const clearRoute = useActiveRoute((s) => s.clear)
 
   const floor = useQuery({
     queryKey: ['floor', modelId, floorIndex],
@@ -21,8 +25,11 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
   })
   const url = api.geometryUrl(modelId, floorIndex)
 
-  // Clear the route builder when switching floors/models.
-  useEffect(() => reset(), [modelId, floorIndex, reset])
+  // Clear the route builder + active route when switching floors/models.
+  useEffect(() => {
+    reset()
+    clearRoute()
+  }, [modelId, floorIndex, reset, clearRoute])
 
   return (
     <div className="flex h-full flex-col bg-neutral-900 text-neutral-100">
@@ -64,10 +71,24 @@ export function FloorView({ modelId, floorIndex }: { modelId: string; floorIndex
               {floor.data && <Markers floor={floor.data} />}
             </Bounds>
           </Suspense>
+
+          <Suspense fallback={null}>
+            {route && <PipeNetwork url={api.meshUrl(route.route_id)} />}
+          </Suspense>
+          {route?.branch_points.map((p, i) => (
+            <mesh key={i} position={p as [number, number, number]}>
+              {/* junction ~1.5x the pipe diameter */}
+              <sphereGeometry args={[(route.diameter_m * 1.5) / 2, 16, 16]} />
+              <meshStandardMaterial color="#facc15" emissive="#facc15" emissiveIntensity={0.5} />
+            </mesh>
+          ))}
+
           <OrbitControls makeDefault enableDamping />
         </Canvas>
         <Loader />
-        {floor.data && <RouteBuilderPanel floor={floor.data} />}
+        {floor.data && (
+          <RouteBuilderPanel modelId={modelId} floorIndex={floorIndex} floor={floor.data} />
+        )}
       </div>
     </div>
   )

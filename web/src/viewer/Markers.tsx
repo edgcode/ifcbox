@@ -1,4 +1,5 @@
 import type { ThreeEvent } from '@react-three/fiber'
+import { Html } from '@react-three/drei'
 import { useRouteBuilder } from '@/state/routeBuilder'
 import type { PickKind } from '@/state/routeBuilder'
 import type { FloorDetail } from '@/api/types'
@@ -23,7 +24,7 @@ function Marker(props: {
 
   const selected = isSource || isTarget
   const color = isSource ? SOURCE : isTarget ? TARGET : BASE[kind]
-  const radius = kind === 'terminal' ? 0.35 : 0.5
+  const radius = (kind === 'terminal' ? 0.22 : 0.28) * (selected ? 1.3 : 1)
 
   return (
     <mesh
@@ -40,12 +41,19 @@ function Marker(props: {
         document.body.style.cursor = 'auto'
       }}
     >
-      <sphereGeometry args={[selected ? radius * 1.3 : radius, 16, 16]} />
+      <sphereGeometry args={[radius, 16, 16]} />
       <meshStandardMaterial
         color={color}
         emissive={color}
         emissiveIntensity={selected ? 0.6 : 0.15}
       />
+      {kind === 'room' && (
+        <Html position={[0, 0, radius + 0.3]} center distanceFactor={14} zIndexRange={[10, 0]}>
+          <div className="pointer-events-none whitespace-nowrap rounded bg-black/60 px-1 text-[10px] leading-tight text-white">
+            {label}
+          </div>
+        </Html>
+      )}
     </mesh>
   )
 }

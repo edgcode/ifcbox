@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useRouteBuilder } from '@/state/routeBuilder'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, ApiError } from '@/api/client'
+import { useRouteBuilder, toAnchorIn } from '@/state/routeBuilder'
 import type { AnchorSel } from '@/state/routeBuilder'
+import { useActiveRoute } from '@/state/activeRoute'
 import type { FloorDetail } from '@/api/types'
 
 function Seg<T extends string>(props: {
@@ -25,7 +28,15 @@ function Seg<T extends string>(props: {
   )
 }
 
-export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
+export function RouteBuilderPanel({
+  modelId,
+  floorIndex,
+  floor,
+}: {
+  modelId: string
+  floorIndex: number
+  floor: FloorDetail
+}) {
   const source = useRouteBuilder((s) => s.source)
   const targets = useRouteBuilder((s) => s.targets)
   const mode = useRouteBuilder((s) => s.mode)
@@ -37,6 +48,29 @@ export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
   const clearSource = useRouteBuilder((s) => s.clearSource)
   const reset = useRouteBuilder((s) => s.reset)
 
+  const result = useActiveRoute((s) => s.result)
+  const setResult = useActiveRoute((s) => s.setResult)
+  const qc = useQueryClient()
+
+  const submit = useMutation({
+    mutationFn: () =>
+      api.submitRoute(modelId, floorIndex, {
+        source: toAnchorIn(source!),
+        targets: targets.map(toAnchorIn),
+        mode,
+      }),
+    onSuccess: (res) => {
+      setResult(res)
+      qc.invalidateQueries({ queryKey: ['routes', modelId] })
+    },
+  })
+
+  const routes = useQuery({ queryKey: ['routes', modelId], queryFn: () => api.listRoutes(modelId) })
+  const loadRoute = useMutation({
+    mutationFn: (id: string) => api.getRoute(id),
+    onSuccess: (res) => setResult(res),
+  })
+
   const [q, setQ] = useState('')
   const items = useMemo<AnchorSel[]>(() => {
     const all: AnchorSel[] = [
@@ -47,8 +81,11 @@ export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
     return all.filter((i) => i.label.toLowerCase().includes(needle))
   }, [floor, q])
 
+  const canRoute = !!source && targets.length > 0 && !submit.isPending
+  const floorRoutes = routes.data?.filter((r) => r.floor_index === floorIndex) ?? []
+
   return (
-    <div className="absolute top-3 right-3 bottom-3 flex w-72 flex-col gap-3 overflow-hidden rounded-lg border border-neutral-700 bg-neutral-900/90 p-3 text-neutral-100 backdrop-blur">
+    <div className="absolute top-3 right-3 bottom-3 flex w-72 flex-col gap-3 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900/90 p-3 text-neutral-100 backdrop-blur">
       <div className="space-y-1">
         <p className="text-xs font-medium text-neutral-400">Picking assigns to</p>
         <Seg
@@ -59,9 +96,6 @@ export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
             { v: 'target', label: 'Target' },
           ]}
         />
-        <p className="text-[11px] text-neutral-500">
-          Click a marker or a wall in the 3D view, or a row below.
-        </p>
       </div>
 
       <div className="space-y-1">
@@ -94,7 +128,7 @@ export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
 
       <div className="space-y-1">
         <p className="text-xs font-medium text-neutral-400">Targets ({targets.length})</p>
-        <div className="max-h-28 space-y-1 overflow-auto">
+        <div className="max-h-24 space-y-1 overflow-auto">
           {targets.map((t, i) => (
             <div
               key={`${t.id ?? 'pt'}-${i}`}
@@ -112,7 +146,46 @@ export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-1">
+      <button
+        onClick={() => submit.mutate()}
+        disabled={!canRoute}
+        className="rounded-md bg-blue-600 px-2 py-1.5 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-40"
+      >
+        {submit.isPending ? 'Routing…' : 'Find route'}
+      </button>
+      {submit.error && (
+        <p className="text-xs text-red-400">
+          {submit.error instanceof ApiError && submit.error.status === 409
+            ? 'Floor not prepared.'
+            : `Route failed: ${(submit.error as Error).message}`}
+        </p>
+      )}
+
+      {result && (
+        <div className="space-y-1 rounded border border-neutral-700 bg-neutral-800/60 p-2 text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-medium">Route · {result.mode}</span>
+            <button onClick={() => setResult(null)} className="text-neutral-400 hover:text-white">
+              clear
+            </button>
+          </div>
+          <p className="text-neutral-300">
+            {result.total_length_m.toFixed(2)} m · {result.segments.length} segment(s)
+          </p>
+          {result.unreachable_targets.length > 0 && (
+            <p className="text-amber-400">{result.unreachable_targets.length} unreachable</p>
+          )}
+          <a
+            href={api.meshUrl(result.route_id)}
+            download
+            className="inline-block text-blue-400 hover:underline"
+          >
+            Download pipe.glb
+          </a>
+        </div>
+      )}
+
+      <div className="flex min-h-32 flex-1 flex-col gap-1">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -135,6 +208,26 @@ export function RouteBuilderPanel({ floor }: { floor: FloorDetail }) {
           ))}
         </ul>
       </div>
+
+      {floorRoutes.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-neutral-400">History ({floorRoutes.length})</p>
+          <div className="max-h-24 space-y-1 overflow-auto">
+            {floorRoutes.map((r) => (
+              <button
+                key={r.route_id}
+                onClick={() => loadRoute.mutate(r.route_id)}
+                className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs hover:bg-neutral-800"
+              >
+                <span>{r.mode}</span>
+                <span className="text-neutral-400">
+                  {r.total_length_m.toFixed(1)} m · {r.segment_count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <button
         onClick={reset}
