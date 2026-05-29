@@ -11,6 +11,7 @@ See plans/spec-frontend.md §10. Used by the API (apartments.json at prepare).
 from __future__ import annotations
 
 import logging
+import re
 from collections import defaultdict, deque
 
 import numpy as np
@@ -18,15 +19,23 @@ import numpy as np
 from ifcbox.pipeline.zoning import FORBIDDEN_PATTERNS, PREFERRED_CORRIDOR_PATTERNS
 from ifcbox.wall_attrs import wall_fire_rating
 
+_EXTERNAL_RE = re.compile(r"^\s*(balkon|terrasse|balcony|terrace|loggia)", re.IGNORECASE)
+
 logger = logging.getLogger(__name__)
 
 _DOOR_SAMPLE_M = 0.35   # sample this far either side of a door, perpendicular to it
 
 
 def _space_polygon(space, settings, site_xform, z):
+    """True (non-convex) section polygon of a space at z, in site-aligned XY.
+
+    Uses the section's actual outline rather than the convex hull, so L-shaped
+    rooms and balcony-attached living rooms don't over-extend into neighbours
+    and falsely link apartments via the open-plan adjacency rule.
+    """
     import ifcopenshell.geom
     import trimesh
-    from shapely.geometry import MultiPoint
+    from shapely.geometry import Polygon
 
     try:
         shape = ifcopenshell.geom.create_shape(settings, space)
@@ -37,9 +46,21 @@ def _space_polygon(space, settings, site_xform, z):
         mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
         mesh = site_xform.transform_mesh(mesh)
         sec = mesh.section(plane_origin=[0, 0, z], plane_normal=[0, 0, 1])
-        if sec is None or len(sec.vertices) < 3:
+        if sec is None:
             return None
-        poly = MultiPoint(sec.vertices[:, :2]).convex_hull
+        loops = []
+        for loop in sec.discrete:
+            if len(loop) < 3:
+                continue
+            try:
+                p = Polygon(loop[:, :2])
+                if p.is_valid and p.area > 0:
+                    loops.append(p)
+            except Exception:
+                pass
+        if not loops:
+            return None
+        poly = max(loops, key=lambda p: p.area)
         return poly if poly.area >= 0.05 else None
     except Exception:
         return None
@@ -80,6 +101,12 @@ def discover_apartments(model, storey, site_xform) -> list[dict]:
     adjacency: dict[str, set] = defaultdict(set)
     fire_edges: set[frozenset] = set()
 
+    # Open-plan adjacency thresholds (mirror demo_routes.build_door_adjacency):
+    # polygons closer than _OPEN_GAP (< thinnest partition, so walls still block)
+    # and sharing ≥ _OPEN_MIN_SHARED of boundary count as a door-less opening.
+    _OPEN_GAP = 0.12
+    _OPEN_MIN_SHARED = 0.40
+
     doors = [d for d in model.by_type("IfcDoor")
              if (c := ifcopenshell.util.element.get_container(d)) is not None
              and c.id() == storey.id]
@@ -102,36 +129,54 @@ def discover_apartments(model, storey, site_xform) -> list[dict]:
         except Exception:
             continue
 
-    def open_neighbours(g):
-        return [h for h in adjacency.get(g, ()) if frozenset((g, h)) not in fire_edges]
+    # Open-plan / door-less openings — two polygons close enough that there is
+    # no wall between them. These are inherently not fire-rated (no wall to host
+    # a rating); they only ever add traversable edges, never fire_edges.
+    gids = list(polys.keys())
+    for i, a in enumerate(gids):
+        pa = polys[a]
+        for b in gids[i + 1:]:
+            if b in adjacency.get(a, ()):
+                continue
+            pb = polys[b]
+            if pa.distance(pb) > _OPEN_GAP:
+                continue
+            shared = pa.buffer(_OPEN_GAP / 2).intersection(pb.buffer(_OPEN_GAP / 2))
+            shared_len = shared.length if not shared.is_empty else 0.0
+            if shared_len >= _OPEN_MIN_SHARED:
+                adjacency[a].add(b)
+                adjacency[b].add(a)
 
     is_flur = lambda nm: bool(PREFERRED_CORRIDOR_PATTERNS.match(nm))
     is_forbidden = lambda nm: bool(FORBIDDEN_PATTERNS.match(nm))
+    is_external = lambda nm: bool(_EXTERNAL_RE.match(nm))
 
+    # BFS per Flur — Flurs and forbidden zones (stairwells / shafts) act as soft
+    # boundaries: not crossed, not listed. Fire-rated edges block traversal.
+    # Balconies / terrasses are reachable but not useful destinations.
     apartments: list[dict] = []
-    seen: set[str] = set()
-    for start in polys:
-        if start in seen:
-            continue
-        comp: list[str] = []
-        dq = deque([start])
-        seen.add(start)
+    for flur in sorted(g for g in polys if is_flur(names[g])):
+        visited = {flur}
+        dq = deque([flur])
+        rooms: list[str] = []
         while dq:
             cur = dq.popleft()
-            comp.append(cur)
-            for nb in open_neighbours(cur):
-                if nb not in seen:
-                    seen.add(nb)
-                    dq.append(nb)
-        flurs = [g for g in comp if is_flur(names[g])]
-        if not flurs:
-            continue
-        source = flurs[0]
-        rooms = [g for g in comp if g != source and not is_forbidden(names[g])]
+            for nb in adjacency.get(cur, ()):
+                if nb in visited:
+                    continue
+                if frozenset((cur, nb)) in fire_edges:
+                    continue
+                visited.add(nb)
+                nm = names.get(nb, "")
+                if is_forbidden(nm) or is_flur(nm):
+                    continue   # don't traverse through, don't list
+                dq.append(nb)
+                if not is_external(nm):
+                    rooms.append(nb)
         if rooms:
             apartments.append({
-                "flur_id": source,
-                "flur_name": names[source],
+                "flur_id": flur,
+                "flur_name": names[flur],
                 "room_ids": rooms,
                 "room_names": [names[g] for g in rooms],
             })
