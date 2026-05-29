@@ -135,16 +135,16 @@ Plus the auth dependency + WS token check ([spec-deploy] §7). Picking, markers,
 
 ## 7. Build Sequencing
 
-- [ ] **F-1** Vite + React + TS scaffold; Tailwind + shadcn; typed API client + Query providers; auth login + token interceptor.
-- [ ] **F-2** Model upload (progress) + model list/select/delete.
-- [ ] **F-3** Floor list + prepare button + WebSocket progress bar.
-- [ ] **F-4** Viewer: `<Canvas>`, camera controls, load `shell.glb` (Z-up), floor isolation.
-- [ ] **F-5** Markers (terminals/rooms) + side list; raycast point picking; route-builder state.
-- [ ] **F-6** Submit route (trunk/independent) → render `pipe.glb` + bend/branch markers + readout; route history; download glb.
-- [ ] **F-7** Overlays (occupancy/SDF plane, aligned) + clipping/section controls.
-- [ ] **F-8** Polish: error/empty/loading states, unreachable-target messaging, responsive panels.
+- [x] **F-1** Vite + React + TS scaffold; Tailwind v4; typed API client + Query providers; auth login + token interceptor.
+- [x] **F-2** Model upload (XHR byte progress + prominent card) + model list/select/delete.
+- [x] **F-3** Floor list + prepare button + WebSocket progress bar.
+- [x] **F-4** Viewer: `<Canvas>`, OrbitControls, load `shell.glb` (Z-up), one-time Bounds fit.
+- [x] **F-5** Markers (terminals/rooms) + side list; raycast point picking; route-builder state with multi-system support.
+- [x] **F-6** Submit route (trunk/independent) → render `pipe.glb` + bend/branch markers + readout; download glb. (Route history dropped from MVP — single active result per system.)
+- [x] **F-7** Overlays (occupancy / clearance / rooms PNG plane) + section clip; wall-colour modes (thickness / wall-type / fire-rating) + legend.
+- [x] **F-8** Polish: light/dark theme; prominent upload + viewer loaders; clip-top default on; terminals hidden by default; right-click context menu; 3D-picking edit-mode gate.
 
-(Backend prerequisites D-1…D-4 in [spec-deploy.md] land before/with F-7.)
+(Backend prerequisites D-1…D-4 in [spec-deploy.md] all landed alongside F-7/F-8.)
 
 ---
 
@@ -172,7 +172,7 @@ Plus the auth dependency + WS token check ([spec-deploy] §7). Picking, markers,
 
 ---
 
-## 10. Planned — apartment auto-routing demo
+## 10. Built — apartment auto-routing demo (2026-05-29)
 
 A one-click demo that mirrors `demo_routes.py` in the web app: **discover each apartment on a floor and route a trunk from its hallway (Flur) to every room**, with each apartment rendered as its own coloured system. Unlike the CLI demo (which bounds apartments by door topology alone), this version bounds them by **fire-rated walls** — the real apartment/compartment boundary — so the flood-fill can't leak into a neighbour through a shared fire door.
 
@@ -191,10 +191,33 @@ Apartment-separating / corridor walls in this model carry a `Pset_WallCommon.Fir
 - Optional: a "highlight apartments" toggle that tints the room-type overlay by apartment-id instead of room type (reuses the overlay-plane plumbing).
 
 ### Sequencing
-- [ ] **A-1** `ifcbox/apartments.py` (shared discovery) + door→host-wall→fire-rating; unit-test apartment counts on the test model.
-- [ ] **A-2** prepare writes `apartments.json`; `GET …/apartments` endpoint.
-- [ ] **A-3** front-end "Route apartments" → auto-create systems → Route all.
+- [x] **A-1** `ifcbox/apartments.py` (shared discovery) + door→host-wall→fire-rating. Validated on floor 6: 4 apartments × {6, 6, 6, 3} rooms, matches the CLI demo.
+- [x] **A-2** prepare writes `apartments.json`; `GET …/apartments` endpoint + lazy backfill + `POST …/apartments/refresh`.
+- [x] **A-3** front-end "Route apartments (N)" → auto-create systems → Route all; small ↻ refresh button next to it.
+
+### As-built notes (diverges from the plan above)
+- **Per-Flur BFS, not connected components.** Each Flur becomes one apartment;
+  the BFS treats other Flurs / forbidden zones / fire-rated edges as soft
+  boundaries. Components would merge two apartments when their living rooms
+  share an open-plan boundary upstream of a fire door, even though the fire
+  door correctly cuts them apart.
+- **True (non-convex) section polygons.** Used `mesh.section(...).discrete`
+  outlines instead of `MultiPoint(...).convex_hull`. Convex hulls of
+  L-shaped rooms / balcony-attached living rooms bled into the neighbour's
+  hull and the open-plan rule (12 cm gap, ≥40 cm shared boundary) accepted
+  them as traversable, merging apartments. Real outlines fixed it.
+- **Open-plan adjacency kept.** Door-only adjacency missed Wohnen/Küche ↔
+  Flur connections without an `IfcDoor`. Ported the demo's geometric rule and
+  marked these edges as *never* fire-rated (there is no wall to host a rating).
+- **Lazy backfill in the GET endpoint.** Floors prepared before the feature
+  shipped get `apartments.json` written on first request, no re-prep needed.
+- **Refresh button (`POST .../apartments/refresh`).** Recomputes against the
+  already-cached `PreparedFloor` (the heavy `prepare_floor` doesn't run again).
+- **Voxel-sampling fallback** — not implemented yet; the IFC relation path is
+  sufficient on the test model.
 
 ### Open questions
-- **Fire-door detection reliability** — IFC door↔wall relations vary by exporter; the voxel-sampling fallback needs validating on more models.
+- **Fire-door detection reliability** — only validated on one test model;
+  IFC door↔wall relations vary by exporter. The voxel-sampling fallback
+  (or the geometric line-of-sight check) is still worth adding.
 - **Flur-less apartments** — apartments with no space named like a corridor need a fallback seed (e.g. the space containing the entrance door, or the largest space).

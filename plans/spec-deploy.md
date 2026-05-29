@@ -154,12 +154,12 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "10000"]
 
 ## 8. Build Sequencing
 
-- [ ] **D-1** `api/storage/` abstraction: extract `BlobStore` + `MetaStore` protocols; move current FS/SQLite behind `LocalBlobStore`/`SqliteMeta`; wire routers/tasks/cache through `factory`. Tests stay green (`IFCBOX_STORAGE=local`).
-- [ ] **D-2** `R2BlobStore` (boto3) + `PostgresMeta` (psycopg). PreparedFloor cache fetch-on-miss from R2. Recoverable prep (stale-status re-trigger).
-- [ ] **D-3** Auth: `require_token` dependency + WS token check.
-- [ ] **D-4** Overlay PNG endpoints (occupancy + clearance per floor) — shared with [spec-frontend.md](spec-frontend.md).
-- [ ] **D-5** Dockerfile (multi-stage) + static mount + SPA fallback; `render.yaml`; `.dockerignore`.
-- [ ] **D-6** Deploy: provision R2 bucket + Postgres + env group; first deploy; smoke the hosted URL.
+- [x] **D-1** `api/storage/` abstraction: extract `BlobStore` + `MetaStore` protocols; move current FS/SQLite behind `LocalBlobStore`/`SqliteMeta`; wire routers/tasks/cache through `factory`. Tests stay green (`IFCBOX_STORAGE=local`).
+- [x] **D-2** `R2BlobStore` (boto3) + `PostgresMeta` (psycopg). PreparedFloor cache fetch-on-miss from R2. Recoverable prep (stale-status re-trigger).
+- [x] **D-3** Auth: `require_token` dependency + WS token check.
+- [x] **D-4** Overlay PNG endpoints (occupancy + clearance + rooms per floor) — shipped as part of Phase 2b.
+- [x] **D-5** Dockerfile (multi-stage) + static mount + SPA fallback; `render.yaml`; `.dockerignore`.
+- [~] **D-6** Deployed to Render + R2 + **Neon** Postgres. Hosted but **unstable on the free 512 MB instance** — the 38 MB test IFC OOMs during prep; smaller models work. Standard 2 GB tier fixes this; left as-is for the demo with the caveat documented. See **§11**.
 
 ---
 
@@ -177,7 +177,20 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "10000"]
 
 ## 10. Open Questions
 
-1. **Render instance tier** — measure peak prep RSS on a real IFC to choose the web-service plan (free 512 MB likely insufficient for tessellation).
-2. **Postgres provider** — Render Postgres vs Neon vs Supabase free tiers (sleep/expiry behaviour differs). Pick before D-2.
-3. **R2 lifecycle** — should orphaned models/routes be garbage-collected, or is manual delete enough for single-user?
-4. **Cold-start latency** — free Render spin-down adds a first-request delay; acceptable for single-user, revisit if annoying.
+1. ~~**Render instance tier**~~ — confirmed: free 512 MB is **not enough** for the 38 MB test IFC (OOM during mesh tessellation); Standard 2 GB clears it. Left on free for the demo with a documented caveat.
+2. ~~**Postgres provider**~~ — picked **Neon** (better free tier compute window). Autosuspend `AdminShutdown` handled by `psycopg_pool.ConnectionPool(check=ConnectionPool.check_connection)` (pings on checkout, recycles dead conns).
+3. **R2 lifecycle** — should orphaned models/routes be garbage-collected, or is manual delete enough for single-user? (Open.)
+4. **Cold-start latency** — free Render spin-down + Neon autosuspend stack to a ~10-20 s first request; acceptable for single-user demo.
+
+---
+
+## 11. As-deployed (2026-05-29)
+
+- **Hosting:** Render Web Service (free), one multi-stage Docker image.
+- **Blobs:** Cloudflare R2 (free tier).
+- **Metadata:** Neon Postgres (free tier, autosuspend on).
+- **Auth:** `IFCBOX_APP_TOKEN` shared secret; required when set, off when unset (local dev/tests).
+- **Known issue:** the 38 MB test IFC OOM-kills the prep worker on the free
+  512 MB Render instance. Smaller IFCs (a few MB, residential single-storey)
+  prepare successfully. The user guide steers people to local mode for the
+  full experience.

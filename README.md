@@ -14,9 +14,8 @@ It's a spatial-intelligence engine (Python) behind a FastAPI backend and a React
 
 > A prepared floor of the test model: walls colour-coded by fire rating, **green** circulation (Flur), **red** forbidden stairwells (Treppenraum), and room labels, and the signed distance field (SDF) the spatial picture the router works from.
 
-- **Try it / run it locally:** [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
-- **Live demo:** _deploying to Render — URL TBA_ (gated by a shared app token) - (not available yet as my free tier hosting has limited ram for model processing)
-
+- **Try it / run it locally** (recommended): [docs/USER_GUIDE.md](docs/USER_GUIDE.md)
+- **Live demo:** [ifcbox.onrender.com](https://ifcbox.onrender.com/) — gated by a shared app token. ⚠️ Runs on Render free (512 MB) + Neon free Postgres + Cloudflare R2 — **slow / unstable on larger IFCs** (the 38 MB demo model OOMs prep at 512 MB; smaller IFCs work). First request after idle takes ~10–30 s while both Render and Neon cold-start.
 - **Deep docs:** [plans index](plans/README.md) · [architecture](docs/architecture.md)
 
 ---
@@ -91,7 +90,7 @@ How it discovers an apartment, purely from the IFC:
 4. **Flood-fill the apartment** — a breadth-first search from each Flur through the door graph collects every room reachable from it; that connected set **is** the apartment.
 5. **Route the trunk** — a shared main from the Flur branches to each room (strict door crossings only; never through stairwells).
 
-> The CLI demo bounds apartments by door **topology**. A planned front-end demo will additionally stop the flood-fill at **fire-rated walls** (the real apartment/compartment boundary) — see [spec-frontend.md](plans/spec-frontend.md).
+> The web app ships the same demo as a one-click **"Route apartments (N)"** button — same Flur-rooted BFS plus a fire-edge tag from each door's host wall (`Pset_WallCommon.FireRating` via `IfcRelFillsElement` → `IfcOpeningElement` → `IfcRelVoidsElement`), so the flood-fill stops at the real apartment/compartment boundary. Implementation lives in [`ifcbox/apartments.py`](ifcbox/apartments.py); see [spec-frontend.md §10](plans/spec-frontend.md).
 
 ---
 

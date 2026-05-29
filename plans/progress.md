@@ -1,6 +1,6 @@
 # IFCBox — Progress & Decision Log
 
-_Last updated: 2026-05-29_
+_Last updated: 2026-05-29 (post-deploy + apartments demo)_
 
 ---
 
@@ -202,10 +202,120 @@ Key fixes / decisions during the build:
 - Optional: per-system route history (dropped in the F-6b rewrite); viewer code-split
   (three.js makes the bundle ~1.2 MB).
 
-### Deployment — not started ([spec-deploy.md](spec-deploy.md) D-1…D-6)
+### Deployment — built ([spec-deploy.md](spec-deploy.md) D-1…D-5 done; D-6 partial)
 
 Pluggable storage (Local FS+SQLite ↔ R2+Postgres), shared-secret auth, multi-stage
-Dockerfile, single Render web service.
+Dockerfile, single Render web service — all built and deployed.
+
+| Step | Status |
+|---|---|
+| D-1 storage abstraction (`BlobStore` + `MetaStore`; local/cloud factory) | done |
+| D-2 R2 (`boto3`) + Postgres (`psycopg`/pool) + R2-fetch-on-miss in `cache.get_prepared` | done |
+| D-3 shared-secret auth (`X-App-Token`; `?token=` for assets/WS) | done |
+| D-4 overlay PNG endpoints (occupancy / clearance / rooms) | done as part of Phase 2b |
+| D-5 multi-stage Dockerfile + SPA fallback + `render.yaml` | done |
+| D-6 deployed to Render + Cloudflare R2 + **Neon** Postgres (smoke) | **partial** — see hosted-app caveats below |
+
+**Hosted app — known limitations (2026-05-29):**
+The hosted app is **slow and occasionally unstable** on the free Render
+instance (512 MB). The 38 MB test IFC OOM-kills the prep worker during mesh
+tessellation; smaller IFCs work. First request after idle is slow because both
+Render and Neon spin from cold. Moving to a Render **Standard (2 GB)** tier
+fixes the OOM; the free tier is left in place to keep cost at zero for the
+demo, with the caveat documented in the user guide. Local mode (Vite + uvicorn
++ FS/SQLite) is the recommended way to actually try it.
+
+**Key decisions (with rationale):**
+- **Neon, not Render Postgres** — better free tier + bigger compute window; pay
+  the autosuspend cost (see below).
+- **Synchronous boto3 + psycopg, single-worker thread for prep** — matches the
+  Phase 2b execution model; async R2/PG would force a rewrite of the worker
+  with no real concurrency benefit (we only ever prep one floor at a time).
+- **`/tmp/ifcbox` local cache for prepared.npz** — Render's FS is ephemeral
+  per restart; R2 is the source of truth, the local cache is a hot copy. Fetched
+  on miss inside `cache.get_prepared`.
+- **Neon `AdminShutdown` after autosuspend** — fixed by giving the
+  `psycopg_pool.ConnectionPool` `check=ConnectionPool.check_connection`, which
+  pings on checkout and recycles dead connections instead of bubbling the error
+  to the request handler.
+- **One Docker image, one origin** — FastAPI mounts the built Vite bundle at
+  `/` with an SPA fallback; `/api/v1/*` is the API. No prod CORS, one deploy.
+- **`pyvista` guarded import** — kept in `requirements.txt` for the CLI but
+  imported lazily so the server image doesn't drag in a display stack.
+
+### Polish & misc (this session)
+- **Generic-piping framing** — `discipline` defaults to `"generic"` in
+  `RouteParams`/`RouteResult`/`export`/`RouteParamsIn`; CLI/demo/viewer strings
+  de-CHW'd. The `plans/` specs keep the "CHW" naming as the historical
+  decision record. README + `architecture.md` aligned.
+- **Wall debug renderers** — `render_wall_properties_debug` (2-panel) split
+  into single-floorplan `render_wall_firerating_debug` +
+  `render_wall_thickness_debug`; `demo_routes.py` calls both. Same scale as the
+  other debug scenes.
+- **Theme: light / dark** — system-aware default, persisted, with HUD panels
+  retaining a glass look in both modes.
+
+---
+
+## Phase 3 — Apartment auto-routing demo (built 2026-05-29)
+
+Spec: [spec-frontend.md §10](spec-frontend.md). Goal: a one-click demo that
+mirrors `demo_routes.py` in the web app — discover each apartment on a floor
+and route a trunk from its hallway (Flur) to every room, with each apartment
+rendered as its own coloured system.
+
+| Layer | What |
+|---|---|
+| `ifcbox/apartments.py` | Shared discovery. Door-adjacency graph + door→host-wall→fire-rating tagging + open-plan adjacency rule + per-Flur BFS bounded by fire edges and other Flurs. |
+| `tasks.py` | Prep also writes `apartments.json` next to `walls.json`/`rooms.png`. |
+| `api/routers/floors.py` | `GET /models/{id}/floors/{n}/apartments` (with lazy backfill if the file is missing on an already-prepared floor); `POST .../apartments/refresh` to recompute against the cached `PreparedFloor` without re-prepping. |
+| `web/src/state/routeBuilder.ts` | `loadApartments(apts)` replaces groups with one trunk system per apartment (source = Flur `RoomAnchor`, targets = room `RoomAnchor`s). |
+| `web/src/ui/RouteBuilderPanel.tsx` | **"Route apartments (N)"** button + small **↻** refresh button. `submitAll`'s mutation reads groups via `useRouteBuilder.getState().groups` so freshly-loaded apartments are submitted before the next React render. |
+
+**Key decisions (with rationale):**
+- **Per-Flur BFS, not connected components** — each Flur is one apartment; the
+  BFS treats other Flurs / forbidden zones / fire-rated edges as soft
+  boundaries. Connected components would merge two apartments when their
+  Wohnen/Küche spaces share an open-plan boundary upstream of a fire door,
+  even though the fire door correctly cuts them apart.
+- **True (non-convex) section polygons** — initial implementation used
+  `MultiPoint(...).convex_hull` (same as `demo_routes.py`); on real L-shaped
+  living rooms with balconies the hull bled into the neighbour's hull, which
+  the open-plan rule then accepted as a traversable edge and merged the two
+  apartments. Switching to `mesh.section(...).discrete` polygons (the actual
+  outline of the room footprint) eliminated the cross-apartment leakage. The
+  CLI demo will likely benefit from the same fix.
+- **Open-plan adjacency rule kept** — door-only adjacency missed rooms
+  connected by archways/openings (no `IfcDoor`); the demo's 12 cm gap + 40 cm
+  shared-boundary heuristic catches those without crossing partitions.
+- **Lazy backfill in the GET endpoint** — floors prepared before the
+  apartments feature have no `apartments.json` on disk; rather than force a
+  re-prep (mesh re-tessellation, slow), the endpoint computes once on first
+  hit, writes the file, and serves it.
+- **Explicit refresh button** — a small ↻ next to "Route apartments" calls
+  `POST .../apartments/refresh`, which recomputes against the cached
+  `PreparedFloor` (no IFC re-parse for `prep`, only `discover_apartments`).
+  Lets the user pick up engine-side discovery changes without re-prepping the
+  whole floor.
+
+### UI polish (this session)
+- **Terminals hidden by default** — `viewer.showTerminals: false`. The
+  searchable terminal/room list in the panel also respects the toggle, so the
+  list and the scene stay in sync.
+- **Storey list cleanup** — dropped the "N terminals · M spaces" chip from
+  the ready-floor rows; the list's job is "click to open".
+- **Clip top on by default** — `viewer.clip: true`; `FloorView` guards
+  rendering on `clip && clipHeight > 0` so the default 0-height plane doesn't
+  clip everything off on first paint, before the floor `grid` is loaded.
+- **Prominent upload loader** — `api.uploadModel` switched to
+  `XMLHttpRequest` for `upload.onprogress` byte events; the models view shows
+  a card with filename + determinate bar during transfer, then an
+  indeterminate "Parsing on server — up to a minute on the free tier" phase
+  once bytes are in.
+- **Prominent viewer loader** — `FloorView` overlays a centred spinner card
+  using drei's `useProgress()` for r3f asset state plus
+  `floor.isLoading` for the floor-detail fetch. Drei's small `<Loader />` bar
+  remains as a secondary signal.
 
 ### Later — routing quality / scale-out / write-back
 

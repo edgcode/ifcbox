@@ -2,13 +2,17 @@
 
 Structural reference for the IFCBox routing pipeline. For *what* we are building and phase scope see the [plans index](../plans/README.md) (`plans/spec-pipeline.md`, `plans/spec-api.md`); for *progress and decision history* see `plans/progress.md`. This document describes *how the system is put together*.
 
-_Last reviewed against code: 2026-05-29 (Phase 1 pipeline)._
+_Last reviewed against code: 2026-05-29 (Phase 1 pipeline + Phase 2 engine/API + Phase 3 frontend / deploy / apartments demo)._
 
 ---
 
 ## 1. System overview
 
-IFCBox takes an IFC building model and a pair of points on one storey, and produces a draft pipe route (waypoints + 3D mesh) that avoids building obstacles. Phase 1 is a Python CLI pipeline; Phase 2 wraps it in a FastAPI + React web platform (not yet built).
+IFCBox takes an IFC building model and one or many points on one storey, and produces a draft pipe route (waypoints + 3D mesh) that avoids building obstacles. The system has three layers — all built:
+
+1. **Engine library** (`ifcbox/`) — pure-Python, no HTTP. The Phase 1 pipeline + a Phase 2 layer (`PreparedFloor` + `route()` + anchors + per-element shell glTF + apartment discovery).
+2. **API** (`api/`) — FastAPI wrapper. Thin HTTP/storage/orchestration layer over the engine, with a pluggable storage backend (local FS+SQLite for dev, Cloudflare R2 + Neon Postgres for prod).
+3. **Frontend** (`web/`) — React + TypeScript (Vite) + react-three-fiber. Renders the server-generated glTF, authors routes, and ships the apartment auto-routing demo.
 
 The pipeline is a linear sequence of pure-ish transforms over a single floor:
 
@@ -117,7 +121,25 @@ Grids are plain numpy arrays shaped `[nx, ny]`: `occupancy` (bool), `clearance` 
 
 ### `visualize.py` / `debug.py` — inspection
 - `visualize.py`: interactive PyVista 3D scene — obstacles semi-transparent grey, pipe solid blue, bend-point spheres, endpoint markers.
-- `debug.py`: 2D floor-plan PNGs — colour-coded obstacles, corridor/door/forbidden zones, all routes overlay, wall-type-name map, wall-property panels (FireRating + thickness).
+- `debug.py`: 2D floor-plan PNGs — colour-coded obstacles, corridor/door/forbidden zones, all-routes overlay, wall-type-name map, and **two single-floorplan wall-property renderers** (`render_wall_firerating_debug`, `render_wall_thickness_debug`).
+
+### `engine.py` (Phase 2a) — library surface
+- `PreparedFloor`: param-independent cached geometry (occupancy / clearance / boolean zone masks / terminals / spaces / `SiteTransform` / `VoxelMeta` / `pipe_z`). `save()` writes `.npz` + `meta.json`; `load()` rehydrates from a directory.
+- `prepare_floor(model, storey, …)`: runs loader → voxelizer → sdf → zoning → returns a `PreparedFloor`.
+- `route(prep, source, targets, mode, params)`: builds the cheap cost grid per request (so `clearance_weight` / `wall_penalty` / `bend_penalty` / `corridor_weight` / `strict_doors` / `diameter` are per-request), runs the router, returns a `RouteResult` with one `RouteSegment` per target (`trunk` shares a main; `independent` runs N paths).
+
+### `resolver.py` — anchors
+- `PointAnchor(xyz)`, `TerminalAnchor(global_id)`, `RoomAnchor(global_id)`; `resolve_anchor()` turns each into a `(vx, vy)` cell (room → polygon centroid → nearest passable voxel).
+
+### `geometry.py` — per-floor shell glTF
+- Exports a **per-element** `shell.glb` (one mesh per IFC element, named by GlobalId) plus a `walls.json` sidecar with per-wall attributes (IFC type, thickness, wall type, fire rating). Drives the front-end wall-colour modes.
+
+### `apartments.py` — apartment discovery (Phase 3 demo)
+- `discover_apartments(model, storey, site_xform) → [{flur_id, flur_name, room_ids, room_names}]`.
+- Builds an `IfcSpace` polygon set from real (non-convex) `mesh.section(...).discrete` outlines — convex hulls of L-shaped rooms leak into neighbours via the open-plan rule.
+- Door-adjacency graph: for each `IfcDoor`, sample 0.35 m either side; record edges between the two spaces it connects, and tag the edge **fire-rated** when the host wall (door → `IfcRelFillsElement` → `IfcOpeningElement` → `IfcRelVoidsElement` → wall) has a `Pset_WallCommon.FireRating`.
+- Open-plan adjacency: pairs of polygons within 12 cm + ≥40 cm shared boundary count as door-less openings (never fire-rated; no wall to host a rating).
+- Per-Flur BFS through the adjacency graph, skipping fire-rated edges and refusing to traverse through *other* Flurs and forbidden zones (stairwells / shafts). Balconies are visited but not listed as destinations.
 
 ---
 
@@ -130,10 +152,62 @@ Both write to `output/<model-stem>/`.
 
 ---
 
-## 6. Phase boundaries (architectural)
+## 6. API layer (`api/`) — FastAPI
 
-Phase 1 (current as built) is a single-floor, point-to-point, in-process pipeline with no persistence beyond output files, driven by `route.py` / `demo_routes.py` CLIs.
+Thin HTTP/storage/orchestration over the engine. No engine logic here.
 
-**Phase 2 (planned, see [plans/spec-api.md](../plans/spec-api.md))** refactors the orchestration that currently lives in `route.py`'s `cmd_route` into a library engine, *without changing* the `pipeline/*` modules: a cached, param-independent `PreparedFloor` (occupancy, clearance, zone masks, terminals, spaces) + a cheap per-request `route()`; a unified anchor model (point | terminal | room) resolved to voxels; trunk (shared-main Steiner) vs independent multi-target routing; and a per-floor building-shell glTF export. The CLIs become thin clients of this engine. A FastAPI app in a sibling `api/` directory then wraps the engine (lazy per-floor background prep, synchronous routing, `.npz`+SQLite storage). Phase 3 adds multi-floor risers, corridor-graph/Steiner at scale, OpenVDB, Postgres/MinIO/Celery, and IFC write-back.
+```
+api/
+├── main.py            # FastAPI app, /api/v1, lifespan init_db, static SPA mount
+├── auth.py            # require_token dependency (X-App-Token header, or ?token= for assets/WS)
+├── deps.py            # request-scoped deps
+├── cache.py           # in-process PreparedFloor LRU over the on-disk cache (R2-backed in cloud mode)
+├── tasks.py           # single-worker ThreadPoolExecutor for prep; writes shell.glb, walls.json, rooms.png, apartments.json
+├── schemas.py         # Pydantic in/out models
+├── routers/
+│   ├── models.py      # upload, list, get, delete; storey metadata parse
+│   ├── floors.py      # detail, prepare (202) + WS progress, geometry (shell.glb), walls, overlays, apartments (+ refresh)
+│   └── routes.py      # submit route (sync 200 / 409), fetch, list, mesh, delete
+└── storage/
+    ├── base.py        # BlobStore + MetaStore protocols
+    ├── local.py       # LocalBlobStore (filesystem) + SqliteMeta
+    ├── cloud.py       # R2BlobStore (boto3) + PostgresMeta (psycopg + ConnectionPool with check_connection for Neon autosuspend)
+    ├── keys.py        # logical blob keys (model_ifc, floor_prepared, floor_shell, floor_walls, floor_rooms, floor_apartments, …)
+    └── factory.py     # picks backend from IFCBOX_STORAGE=local|cloud
+```
 
-Keep new engine code library-shaped (pure functions over explicit data types) so the API stays a thin layer. This section will be revised to *as-built* once the Phase 2 refactor lands.
+- **Execution:** prep is lazy and per-floor; one worker thread serialises builds. Progress is written to the `floor_prep` row in the meta store and streamed over a WebSocket; routing is synchronous on a prepared floor, **409** if unprepared.
+- **Storage abstraction:** routers and tasks call `blobs.write_text(key, …) / blobs.commit(key) / blobs.read_path(key)` and `meta.set_floor_status(…)` — never the backend directly. Tests pin `IFCBOX_STORAGE=local`, so the 19-test suite is offline.
+- **PreparedFloor cache under cloud:** `cache.get_prepared()` checks memory → local cache dir (`IFCBOX_CACHE_DIR`, default `/tmp/ifcbox`) → on miss, `BlobStore.read_dir()` pulls `prepared.npz` from R2 into the cache dir. So routing works on a cold container as long as the prep exists in R2.
+
+---
+
+## 7. Frontend (`web/`) — React + react-three-fiber
+
+Renders server-generated glTF and drives the API. No IFC parsing in the browser.
+
+```
+web/src/
+├── api/                  # typed API client (fetch + XHR for upload byte-progress); Apartment/Walls types
+├── state/                # Zustand stores: auth, viewer, selection, routeBuilder, routeResults, theme
+├── viewer/               # r3f: BimShell, Markers, PointMarkers, OverlayPlane, PipeNetwork, Clipping, FloorView, colors
+├── ui/                   # Login, ModelsView (with upload loader), ModelView, FloorView header, ViewerControls,
+│                         #   RouteBuilderPanel (Route apartments + ↻), Legend, ContextMenu, ThemeToggle
+└── app/                  # App shell + TanStack Query providers
+```
+
+- **Per-element shell:** `BimShell` loads `shell.glb`; node names are GlobalIds, so wall-colour modes recolour material per element using `walls.json`. Apartments referenced by `RoomAnchor` use the same GlobalIds.
+- **Apartment auto-routing demo:** `RouteBuilderPanel` fetches `/apartments`, replaces the systems list with one trunk per apartment via `routeBuilder.loadApartments`, then `submitAll` (one click). A small ↻ next to it calls `POST .../apartments/refresh` to recompute without re-prepping. `submitAll`'s mutation reads `useRouteBuilder.getState().groups` so the freshly-loaded apartments are submitted before React re-renders.
+- **Loading UX:** prominent card on the models view during upload (XHR byte progress → indeterminate "Parsing on server" phase); centred spinner card in `FloorView` driven by drei's `useProgress()` plus `floor.isLoading`.
+
+---
+
+## 8. Deployment (Phase 3) — as built
+
+- **Single Docker image, one origin** — multi-stage build (Node→Vite bundle, then Python runtime); FastAPI mounts the built bundle at `/` with an SPA fallback and serves the API at `/api/v1/*`.
+- **Render Web Service** from the Dockerfile + `render.yaml`.
+- **Cloudflare R2** holds all blobs; **Neon Postgres** holds the meta tables (`models`, `floor_prep`, `routes`).
+- **Auth:** `IFCBOX_APP_TOKEN` shared secret enforced by `require_token`; `?token=` query carries it for `useGLTF`/`useTexture` and the WS.
+- **Free-tier caveat (2026-05-29):** the hosted app is on Render free (512 MB) and Neon free (autosuspends). The 38 MB test IFC OOM-kills prep at 512 MB; smaller IFCs work. First request after idle is slow because both services cold-start. Standard 2 GB removes the OOM; left as-is for the demo.
+
+See [plans/spec-deploy.md](../plans/spec-deploy.md) for env vars, sequencing, and hosted-app notes.

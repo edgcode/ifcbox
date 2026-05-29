@@ -41,6 +41,7 @@ Once a floor is open in the 3D viewer:
 * **Mode:** **Trunk** (one shared main that branches to all targets) or **Independent** (a separate pipe per target).
 * **Systems:** add more **systems** (e.g. one plant room → its zone) with **+ Add**; each routes independently in its own colour.
 * **Route all** → pipes render in 3D (junctions sized to the pipe), with length + segment readout and a **Download pipe.glb**.
+* **Route apartments (N)** → one-click demo: auto-discover each apartment on the floor (BFS from each *Flur* through doors, stopped at fire-rated walls) and create one trunk system per apartment, each in its own colour, then routes the lot. The small **↻** beside it re-discovers (use after engine updates) without re-prepping the floor.
 * **Left panel:**
 
   * **Wall colour:** Default / Wall thickness / Wall type / Fire rating (read from the IFC), with a legend.
@@ -51,18 +52,17 @@ Once a floor is open in the 3D viewer:
 
 ---
 
-## 3 · Try the hosted app (limited on free tier)
+## 3 · Try the hosted app (slow / unstable on free tier)
 
-> The hosted deployment may fail or become unresponsive on larger models because the free-tier instance does not have enough RAM for some processing workloads.
+> ⚠️ **Free-tier caveats.** The hosted app runs on **Render free (512 MB)** + **Neon free Postgres** + **Cloudflare R2**. Two consequences:
+>
+> 1. **Large IFCs OOM during prep.** The 38 MB demo model OOM-kills the prep worker on 512 MB. Try a **small residential IFC** (a few MB, single occupied storey) or run locally (§1).
+> 2. **First request after idle is slow.** Both Render and Neon spin from cold — expect ~10–30 s for the very first response and the first prepare. The prominent loaders in the UI tell you what stage you're in. Don't refresh.
 
-1. Open the deployment URL [](https://ifcbox.onrender.com/) and **sign in** with the shared **app token**.
-2. **Upload** an IFC model (`.ifc`). It's parsed and listed with its storey count.
-3. Click the model → a **Storeys** list. Click **Prepare** on a floor (a residential floor with rooms works best). A progress bar streams `extract → voxelize → shell` over a WebSocket; after ~15-30 s it goes **Ready** with terminal/space counts.
-4. Click **Open 3D →**.
-
-Then follow the **3D workflow** above.
-
-> First load after the app has been idle is slow — the free Render instance and the Neon database resume on demand.
+1. Open [https://ifcbox.onrender.com/](https://ifcbox.onrender.com/) and **sign in** with the shared **app token**.
+2. **Upload** an IFC model (`.ifc`). The upload card shows real byte progress, then an indeterminate "Parsing on server" phase while ifcopenshell opens it.
+3. Click the model → a **Storeys** list. Click **Prepare** on a residential storey. A progress bar streams `extract → voxelize → shell → apartments` over a WebSocket.
+4. Click **Open 3D →**, then follow the **3D workflow** above. Try **Route apartments (N)** for the auto-routing demo.
 
 
 ---
@@ -124,6 +124,7 @@ The tests skip cleanly if the test IFC isn't present.
 ## Notes & troubleshooting
 
 - **Which floor?** Pick a residential/occupied storey with `IfcSpace`s (rooms) — the demo model's floor 6 (`OKFF OG1`) is a good example.
-- **Prepare is slow / killed:** preparing a large IFC tessellates a lot of geometry; on a memory-limited host it can run out of RAM. Locally that's fine; hosted, bump the instance size.
+- **Prepare is slow / killed:** preparing a large IFC tessellates a lot of geometry; on a memory-limited host it can run out of RAM. Locally that's fine; hosted, the free Render 512 MB tier won't hold the 38 MB demo IFC — try a smaller model or upgrade the instance.
+- **"Route apartments" button missing:** appears only on prepared floors that have at least one named hallway (matching `Flur` / `Korridor` / `Diele` etc.). For floors prepared before this feature shipped, the GET endpoint backfills `apartments.json` on first hit; you can also click the **↻** button to force a re-discovery.
 - **"Floor not prepared" (409):** prepare the floor first — routing and geometry need the cached `PreparedFloor`.
 - **No rooms shaded / "Other":** room types come from `IfcSpace` names (DE + EN patterns); unrecognised names fall to *Other*.

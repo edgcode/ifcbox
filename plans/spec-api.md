@@ -345,18 +345,24 @@ Stages: `extract_meshes → voxelize → clearance → zones → shell_glb → d
 
 ## 4. Build Sequencing
 
-### Phase 2a — Engine refactor (library, no web)
+### Phase 2a — Engine refactor (library, no web) — done
 
-- [ ] **2a-1** `prepare_floor()` + `PreparedFloor` + `save/load`. Refactor `zoning` to return a boolean `door_zone` mask (magnitudes applied at route time). Consolidate space extraction into `loader`.
-- [ ] **2a-2** `resolver.py` (anchors) + `route()` with `trunk` and `independent` modes + `RouteResult`. `geometry.py` shell glTF export.
-- [ ] **2a-3** Rewrite `route.py` + `demo_routes.py` as thin engine clients. Parity-check route length/waypoints vs PoC on `model.ifc`.
+- [x] **2a-1** `prepare_floor()` + `PreparedFloor` + `save/load`. `zoning` returns boolean `door_zone`/`corridor`/`forbidden`; magnitudes applied at route time. Space extraction in `loader`.
+- [x] **2a-2** `resolver.py` (point/terminal/room anchors) + `route()` with `trunk` and `independent` modes + `RouteResult`. `geometry.py` per-element shell glTF + `walls.json` sidecar.
+- [x] **2a-3** `route.py` + `demo_routes.py` rewritten as thin engine clients; route length/waypoints match the PoC baseline (4.50 m, identical waypoints).
 
-### Phase 2b — FastAPI backend
+### Phase 2b — FastAPI backend — done
 
-- [ ] **2b-1** App skeleton, SQLite schema, storage helpers. `POST /models` (upload + metadata parse), `GET /models`, `GET /models/{id}`, `DELETE`.
-- [ ] **2b-2** `POST .../prepare` background task + disk cache + `WS` progress. `GET .../floors/{n}` (status, terminals, spaces). `GET .../geometry`.
-- [ ] **2b-3** `POST .../routes` (sync, 409 if unprepared) + `RouteResult` serialization + `pipe.glb`. `GET /models/{id}/routes`, `GET /routes/{id}`, `GET /routes/{id}/mesh`.
-- [ ] **2b-4** Hardening: error contracts, partial-reachability, concurrency (serialize prep builds), endpoint tests on `model.ifc`.
+- [x] **2b-1** App skeleton, SQLite schema, storage helpers. `POST /models` (upload + metadata parse), `GET /models`, `GET /models/{id}`, `DELETE`.
+- [x] **2b-2** `POST .../prepare` background task + disk cache + `WS` progress. `GET .../floors/{n}` (status, terminals, spaces, grid). `GET .../geometry`.
+- [x] **2b-3** `POST .../routes` (sync, 409 if unprepared) + `RouteResult` serialization + `pipe.glb`. `GET /models/{id}/routes`, `GET /routes/{id}`, `GET /routes/{id}/mesh`.
+- [x] **2b-4** Hardening: error contracts, partial-reachability, single-worker prep, endpoint tests on `model.ifc`. **19 tests green.**
+
+### Phase 3 — extensions
+
+- [x] Frontend MVP (see [spec-frontend.md](spec-frontend.md) F-1…F-8) — built.
+- [x] Pluggable storage + auth + Docker + Render deploy (see [spec-deploy.md](spec-deploy.md) D-1…D-5; D-6 partial — see hosted-app caveats there).
+- [x] Apartment auto-routing demo (`ifcbox/apartments.py` + `GET/POST .../apartments[/refresh]` + front-end "Route apartments" button) — built.
 
 ### Testing
 
